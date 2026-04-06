@@ -1,0 +1,39 @@
+2026-04-07 05:46:08.903[1775515568903] | INFO  | main       | o.s.t.c.s.AnnotationConfigContextLoaderUtils - Could not detect default configuration classes for test class [com.trading.execute.ExecuteServiceIntegrationTest]: ExecuteServiceIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-04-07 05:46:09.016[1775515569016] | INFO  | main       | o.s.b.t.c.SpringBootTestContextBootstrapper - Found @SpringBootConfiguration com.trading.execute.ExecuteServiceApplication for test class com.trading.execute.ExecuteServiceIntegrationTest
+2026-04-07 05:46:09.402[1775515569402] | INFO  | background-preinit | o.h.validator.internal.util.Version  - HV000001: Hibernate Validator 8.0.1.Final
+2026-04-07 05:46:09.437[1775515569437] | WARN  | main       | o.s.b.t.j.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer - 
+
+Found multiple occurrences of org.json.JSONObject on the class path:
+
+	jar:file:/C:/Users/letua/.m2/repository/org/json/json/20231013/json-20231013.jar!/org/json/JSONObject.class
+	jar:file:/C:/Users/letua/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar!/org/json/JSONObject.class
+
+You may wish to exclude one of them to ensure predictable runtime behavior
+
+2026-04-07 05:46:09.448[1775515569448] | INFO  | main       | c.t.e.ExecuteServiceIntegrationTest  - Starting ExecuteServiceIntegrationTest using Java 21.0.8 with PID 27728 (started by letua in E:\code\draft-idea-trading\execute-service)
+2026-04-07 05:46:09.449[1775515569449] | INFO  | main       | c.t.e.ExecuteServiceIntegrationTest  - The following 1 profile is active: "test"
+2026-04-07 05:46:10.215[1775515570215] | INFO  | main       | o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-04-07 05:46:10.283[1775515570283] | INFO  | main       | o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 60 ms. Found 5 JPA repository interfaces.
+2026-04-07 05:46:10.903[1775515570903] | INFO  | main       | com.zaxxer.hikari.HikariDataSource   - HikariPool-1 - Starting...
+2026-04-07 05:46:11.056[1775515571056] | INFO  | main       | com.zaxxer.hikari.pool.HikariPool    - HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:execute user=SA
+2026-04-07 05:46:11.056[1775515571056] | INFO  | main       | com.zaxxer.hikari.HikariDataSource   - HikariPool-1 - Start completed.
+2026-04-07 05:46:11.088[1775515571088] | INFO  | main       | org.flywaydb.core.FlywayExecutor     - Database: jdbc:h2:mem:execute (H2 2.2)
+2026-04-07 05:46:11.092[1775515571092] | WARN  | main       | o.f.c.i.database.base.Database       - Flyway upgrade recommended: H2 2.2.224 is newer than this version of Flyway and support has not been tested. The latest supported version of H2 is 2.2.220.
+2026-04-07 05:46:11.108[1775515571108] | INFO  | main       | o.f.c.i.s.JdbcTableSchemaHistory     - Schema history table "execute"."flyway_schema_history" does not exist yet
+2026-04-07 05:46:11.109[1775515571109] | INFO  | main       | o.f.core.internal.command.DbValidate - Successfully validated 1 migration (execution time 00:00.011s)
+2026-04-07 05:46:11.114[1775515571114] | INFO  | main       | o.f.c.i.s.JdbcTableSchemaHistory     - Creating Schema History table "execute"."flyway_schema_history" ...
+2026-04-07 05:46:11.137[1775515571137] | INFO  | main       | o.f.core.internal.command.DbMigrate  - Current version of schema "execute": << Empty Schema >>
+2026-04-07 05:46:11.142[1775515571142] | INFO  | main       | o.f.core.internal.command.DbMigrate  - Migrating schema "execute" to version "1.0.0 - baseline execute"
+2026-04-07 05:46:11.158[1775515571158] | INFO  | main       | o.f.core.internal.command.DbMigrate  - Successfully applied 1 migration to schema "execute", now at version v1.0.0 (execution time 00:00.007s)
+2026-04-07 05:46:11.252[1775515571252] | INFO  | main       | o.h.jpa.internal.util.LogHelper      - HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-04-07 05:46:11.312[1775515571312] | INFO  | main       | org.hibernate.Version                - HHH000412: Hibernate ORM core version 6.5.3.Final
+2026-04-07 05:46:11.346[1775515571346] | INFO  | main       | o.h.c.i.RegionFactoryInitiator       - HHH000026: Second-level cache disabled
+2026-04-07 05:46:11.614[1775515571614] | INFO  | main       | o.s.o.j.p.SpringPersistenceUnitInfo  - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-04-07 05:46:12.286[1775515572286] | INFO  | main       | o.h.e.t.j.p.i.JtaPlatformInitiator   - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-04-07 05:46:12.300[1775515572300] | INFO  | main       | o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-04-07 05:46:12.762[1775515572762] | WARN  | main       | o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-04-07 05:46:13.361[1775515573361] | INFO  | main       | o.s.b.a.e.web.EndpointLinksResolver  - Exposing 2 endpoints beneath base path '/actuator'
+2026-04-07 05:46:13.422[1775515573422] | INFO  | main       | c.t.e.ExecuteServiceIntegrationTest  - Started ExecuteServiceIntegrationTest in 4.271 seconds (process running for 5.427)
+2026-04-07 05:46:14.049[1775515574049] | INFO  | SpringApplicationShutdownHook | o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-04-07 05:46:14.050[1775515574050] | INFO  | SpringApplicationShutdownHook | com.zaxxer.hikari.HikariDataSource   - HikariPool-1 - Shutdown initiated...
+2026-04-07 05:46:14.052[1775515574052] | INFO  | SpringApplicationShutdownHook | com.zaxxer.hikari.HikariDataSource   - HikariPool-1 - Shutdown completed.

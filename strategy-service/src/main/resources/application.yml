@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: strategy-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+server:
+  port: ${SERVER_PORT:8081}
+
+# Deployment execution path (SIMULATE | LIVE). Must be SIMULATE when app.backtest.enabled=true.
+trading:
+  mode: ${TRADING_MODE:SIMULATE}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  kafka:
+    topics:
+      strategy-signal: ${TOPIC_STRATEGY_SIGNAL:BTCUSDT.strategy.signal}
+  strategy:
+    symbol: ${SYMBOL:BTCUSDT}
+    interval: ${KLINE_INTERVAL:15m}
+    n: ${STRATEGY_N:500}
+    k: ${STRATEGY_K:2}
+    taker-fee: ${TAKER_FEE:0.0005}
+    similarity-threshold: ${SIMILARITY_THRESHOLD:0.001}
+    trigger-ms: ${STRATEGY_TRIGGER_MS:2000}
+    min-signal-interval-ms: ${MIN_SIGNAL_INTERVAL_MS:10000}
+  market-data:
+    base-rest-url: ${BINANCE_REST_BASE_URL:https://fapi.binance.com}
+    ws-base-url: ${BINANCE_WS_BASE_URL:wss://fstream.binance.com}
+    rest-limit: ${REST_KLINE_LIMIT:500}
+    ws-enabled: ${WS_ENABLED:true}
+  backtest:
+    enabled: ${BACKTEST_ENABLED:false}
+    standalone-exit: ${BACKTEST_STANDALONE_EXIT:true}
+    ohlc-order: ${BACKTEST_OHLC_ORDER:OHLC}

@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: execute-service
+  datasource:
+    url: ${EXECUTE_DB_URL:jdbc:postgresql://postgres:5432/trading}
+    username: ${EXECUTE_DB_USER:trading}
+    password: ${EXECUTE_DB_PASSWORD:trading}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_GROUP_EXECUTE:execute-service-live}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: execute
+  flyway:
+    enabled: true
+    schemas: execute
+    default-schema: execute
+    create-schemas: true
+
+server:
+  port: ${SERVER_PORT:8082}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+trading:
+  mode: ${TRADING_MODE:SIMULATE}
+
+# Mirrors strategy-service BACKTEST_ENABLED for startup validation (spec 2.3.1).
+app:
+  backtest:
+    enabled: ${BACKTEST_ENABLED:false}
+  kafka:
+    topics:
+      strategy-signal: ${TOPIC_STRATEGY_SIGNAL:BTCUSDT.strategy.signal}
+  execute:
+    symbol: ${SYMBOL:BTCUSDT}
+    interval: ${KLINE_INTERVAL:15m}
+    mode: ${TRADING_MODE:SIMULATE}
+    leverage: ${LEVERAGE:20}
+    taker-fee: ${TAKER_FEE:0.0005}
+    sizing:
+      mode: ${SIZING_MODE:PERCENT}
+      account-percent: ${SIZING_ACCOUNT_PERCENT:0.01}
+      max-account-percent: ${SIZING_MAX_ACCOUNT_PERCENT:0.02}
+      fixed-notional-usdt: ${SIZING_FIXED_NOTIONAL_USDT:20}
+    risk:
+      max-loss-percent: ${RISK_MAX_LOSS_PERCENT:0.20}
+      bucket-hours: ${RISK_BUCKET_HOURS:24}
+    auth:
+      admin-token: ${ADMIN_TOKEN:change-me}
+    latency:
+      warn-ms: ${LATENCY_WARN_MS:1000}
+      block-ms: ${LATENCY_BLOCK_MS:5000}
+    reconciliation:
+      sync-ms: ${RECONCILIATION_SYNC_MS:30000}
+      drift-usdt: ${RECONCILIATION_DRIFT_USDT:0.5}
+  binance:
+    api-key: ${BINANCE_API_KEY:}
+    secret-key: ${BINANCE_SECRET_KEY:}
+    base-url: ${BINANCE_REST_BASE_URL:https://fapi.binance.com}

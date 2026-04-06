@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: simulate-service
+  datasource:
+    url: ${SIMULATE_DB_URL:jdbc:postgresql://postgres:5432/trading}
+    username: ${SIMULATE_DB_USER:trading}
+    password: ${SIMULATE_DB_PASSWORD:trading}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_GROUP_SIMULATE:simulate-service}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: simulate
+  flyway:
+    enabled: true
+    schemas: simulate
+    default-schema: simulate
+    create-schemas: true
+
+server:
+  port: ${SERVER_PORT:8083}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+trading:
+  mode: ${TRADING_MODE:SIMULATE}
+
+# Mirrors strategy-service BACKTEST_ENABLED for startup validation (spec 2.3.1).
+app:
+  backtest:
+    enabled: ${BACKTEST_ENABLED:false}
+  kafka:
+    topics:
+      strategy-signal: ${TOPIC_STRATEGY_SIGNAL:BTCUSDT.strategy.signal}
+  simulate:
+    symbol: ${SYMBOL:BTCUSDT}
+    leverage: ${LEVERAGE:20}
+    taker-fee: ${TAKER_FEE:0.0005}
+    initial-balance-usdt: ${SIM_INITIAL_BALANCE_USDT:500}
+    sizing:
+      mode: ${SIZING_MODE:PERCENT}
+      account-percent: ${SIZING_ACCOUNT_PERCENT:0.01}
+      max-account-percent: ${SIZING_MAX_ACCOUNT_PERCENT:0.02}
+      fixed-notional-usdt: ${SIZING_FIXED_NOTIONAL_USDT:20}
+    liquidation:
+      isolated-margin-loss-threshold: ${SIM_LIQUIDATION_MARGIN_LOSS_THRESHOLD:0.8}
+    auth:
+      admin-token: ${ADMIN_TOKEN:change-me}
+    latency:
+      warn-ms: ${LATENCY_WARN_MS:1000}
+      block-ms: ${LATENCY_BLOCK_MS:5000}

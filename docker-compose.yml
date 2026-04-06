@@ -1,0 +1,143 @@
+services:
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: trading-kafka
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: [ "CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16
+    container_name: trading-postgres
+    environment:
+      POSTGRES_DB: trading
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: trading
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U trading -d trading" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  strategy-service:
+    build:
+      context: .
+      dockerfile: strategy-service/Dockerfile
+    container_name: strategy-service
+    environment:
+      SERVER_PORT: ${STRATEGY_PORT:-8081}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      TOPIC_STRATEGY_SIGNAL: ${TOPIC_STRATEGY_SIGNAL:-BTCUSDT.strategy.signal}
+      SYMBOL: ${SYMBOL:-BTCUSDT}
+      KLINE_INTERVAL: ${KLINE_INTERVAL:-15m}
+      STRATEGY_N: ${STRATEGY_N:-500}
+      STRATEGY_K: ${STRATEGY_K:-2}
+      TAKER_FEE: ${TAKER_FEE:-0.0005}
+      SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.001}
+      STRATEGY_TRIGGER_MS: ${STRATEGY_TRIGGER_MS:-2000}
+      MIN_SIGNAL_INTERVAL_MS: ${MIN_SIGNAL_INTERVAL_MS:-10000}
+      BINANCE_REST_BASE_URL: ${BINANCE_REST_BASE_URL:-https://fapi.binance.com}
+      BINANCE_WS_BASE_URL: ${BINANCE_WS_BASE_URL:-wss://fstream.binance.com}
+      REST_KLINE_LIMIT: ${REST_KLINE_LIMIT:-500}
+      WS_ENABLED: ${WS_ENABLED:-true}
+      TRADING_MODE: ${TRADING_MODE:-SIMULATE}
+      BACKTEST_ENABLED: ${BACKTEST_ENABLED:-false}
+      BACKTEST_STANDALONE_EXIT: ${BACKTEST_STANDALONE_EXIT:-true}
+      BACKTEST_OHLC_ORDER: ${BACKTEST_OHLC_ORDER:-OHLC}
+    ports:
+      - "${STRATEGY_PORT:-8081}:8081"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  execute-service:
+    build:
+      context: .
+      dockerfile: execute-service/Dockerfile
+    container_name: execute-service
+    environment:
+      SERVER_PORT: ${EXECUTE_PORT:-8082}
+      TRADING_MODE: ${TRADING_MODE:-SIMULATE}
+      BACKTEST_ENABLED: ${BACKTEST_ENABLED:-false}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      TOPIC_STRATEGY_SIGNAL: ${TOPIC_STRATEGY_SIGNAL:-BTCUSDT.strategy.signal}
+      KAFKA_GROUP_EXECUTE: ${KAFKA_GROUP_EXECUTE:-execute-service-live}
+      SYMBOL: ${SYMBOL:-BTCUSDT}
+      KLINE_INTERVAL: ${KLINE_INTERVAL:-15m}
+      LEVERAGE: ${LEVERAGE:-20}
+      TAKER_FEE: ${TAKER_FEE:-0.0005}
+      SIZING_MODE: ${SIZING_MODE:-PERCENT}
+      SIZING_ACCOUNT_PERCENT: ${SIZING_ACCOUNT_PERCENT:-0.01}
+      SIZING_MAX_ACCOUNT_PERCENT: ${SIZING_MAX_ACCOUNT_PERCENT:-0.02}
+      SIZING_FIXED_NOTIONAL_USDT: ${SIZING_FIXED_NOTIONAL_USDT:-20}
+      RISK_MAX_LOSS_PERCENT: ${RISK_MAX_LOSS_PERCENT:-0.20}
+      RISK_BUCKET_HOURS: ${RISK_BUCKET_HOURS:-24}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-change-me}
+      LATENCY_WARN_MS: ${LATENCY_WARN_MS:-1000}
+      LATENCY_BLOCK_MS: ${LATENCY_BLOCK_MS:-5000}
+      RECONCILIATION_SYNC_MS: ${RECONCILIATION_SYNC_MS:-30000}
+      RECONCILIATION_DRIFT_USDT: ${RECONCILIATION_DRIFT_USDT:-0.5}
+      BINANCE_API_KEY: ${BINANCE_API_KEY:-}
+      BINANCE_SECRET_KEY: ${BINANCE_SECRET_KEY:-}
+      BINANCE_REST_BASE_URL: ${BINANCE_REST_BASE_URL:-https://fapi.binance.com}
+      EXECUTE_DB_URL: ${EXECUTE_DB_URL:-jdbc:postgresql://postgres:5432/trading}
+      EXECUTE_DB_USER: ${EXECUTE_DB_USER:-trading}
+      EXECUTE_DB_PASSWORD: ${EXECUTE_DB_PASSWORD:-trading}
+    ports:
+      - "${EXECUTE_PORT:-8082}:8082"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  simulate-service:
+    build:
+      context: .
+      dockerfile: simulate-service/Dockerfile
+    container_name: simulate-service
+    environment:
+      SERVER_PORT: ${SIMULATE_PORT:-8083}
+      TRADING_MODE: ${TRADING_MODE:-SIMULATE}
+      BACKTEST_ENABLED: ${BACKTEST_ENABLED:-false}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      TOPIC_STRATEGY_SIGNAL: ${TOPIC_STRATEGY_SIGNAL:-BTCUSDT.strategy.signal}
+      KAFKA_GROUP_SIMULATE: ${KAFKA_GROUP_SIMULATE:-simulate-service}
+      SYMBOL: ${SYMBOL:-BTCUSDT}
+      LEVERAGE: ${LEVERAGE:-20}
+      TAKER_FEE: ${TAKER_FEE:-0.0005}
+      SIZING_MODE: ${SIZING_MODE:-PERCENT}
+      SIZING_ACCOUNT_PERCENT: ${SIZING_ACCOUNT_PERCENT:-0.01}
+      SIZING_MAX_ACCOUNT_PERCENT: ${SIZING_MAX_ACCOUNT_PERCENT:-0.02}
+      SIZING_FIXED_NOTIONAL_USDT: ${SIZING_FIXED_NOTIONAL_USDT:-20}
+      SIM_INITIAL_BALANCE_USDT: ${SIM_INITIAL_BALANCE_USDT:-500}
+      SIM_LIQUIDATION_MARGIN_LOSS_THRESHOLD: ${SIM_LIQUIDATION_MARGIN_LOSS_THRESHOLD:-0.8}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-change-me}
+      LATENCY_WARN_MS: ${LATENCY_WARN_MS:-1000}
+      LATENCY_BLOCK_MS: ${LATENCY_BLOCK_MS:-5000}
+      SIMULATE_DB_URL: ${SIMULATE_DB_URL:-jdbc:postgresql://postgres:5432/trading}
+      SIMULATE_DB_USER: ${SIMULATE_DB_USER:-trading}
+      SIMULATE_DB_PASSWORD: ${SIMULATE_DB_PASSWORD:-trading}
+    ports:
+      - "${SIMULATE_PORT:-8083}:8083"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy

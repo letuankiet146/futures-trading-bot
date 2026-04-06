@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:execute;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;INIT=CREATE SCHEMA IF NOT EXISTS execute
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: execute
+  flyway:
+    enabled: true
+    schemas: execute
+    default-schema: execute
+    create-schemas: true
+  kafka:
+    bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: false
