@@ -1,0 +1,57 @@
+[ DEPRECATED — do not use as specification. Canonical requirements are in question.md, question2.md, and question3.md (inline answers). This file is kept only as historical context. ]
+
+Let's build a micro services. Please following below services for corresponding purpose:
+
+- Queue: bus of communicate between services.
+- Execute service: Receive execution request from strategy service.
+    - Risk engine:
+        - Binance future REST API for init (Exchange info: symbol, precision price, precision quantity, price tick, quantity tick).
+        - Status: current account balance (call REST API for initialize and manage in local, for each 30s sync with exchange), max lose (persist in system), current lose (persist in system)
+        - Calculate risk to dicide allow to trade (default yes, will implement logic later)
+        - In case of allowing trade: Calculate quantity for order request (Must follow price tick, price precision, quantity precision, min notation) base on percent of account or fix notation (configurable)
+    - Execute egine: check risk flag then send request to Exchange and update risk status (account balance, current lose).
+        - **Margin mode (live):** use **isolated** margin for the traded symbol — must match simulate behavior (not cross-only while paper is isolated).
+        - Binance Engine: Use WS API for send request.
+        - OKX Engine: just placeholder, will implement later.
+        
+- Simulate trading service: must have following features for me and you can add addtional features if any.  
+        - Listen current price from queue for simulation. 
+        - Binance future REST API for init (Exchange info: symbol, precision price, precision quantity, price tick, quantity tick).
+        - Paper trading: Simulate trading on exchange.
+            - It will have these information: account balance, trading fee, opening positions, opening orders, trades history (must include: pnl and fee), win-lose rate, total trades, total pnl
+            - Validate account balance before create order to avoid negative balance still open order.
+            - Risk manage: Calculate quantity for order request (MUST follow exchange information: precision price, precision quantity, price tick, quantity tick). Base on percent of account or fix notation (configurable)
+        - Combine the account status in the testing account and current price to decide: Fill, Liquidation. In case of liquidation should not allow continue trade and alway log warning if module is called.
+
+- Strategy service: 
+    - Market data engine:
+        - Binance future WSS for streaming data: For live testing. 
+            - It will subscribe following channels: <symbol>@markPrice
+            - Trigger strategy engine for each 2s.
+        - Candlestick series (live / paper, not backtest): Do **not** poll REST repeatedly for klines after init (avoid spamming the exchange).
+            - **Initialize:** call REST `GET /fapi/v1/klines` once (or on reconnect) to load enough historical candles for the strategy window and buffers.
+            - **Ongoing:** subscribe to Binance Futures **WebSocket kline** stream for the configured interval (default **15m**, e.g. `<symbol>@kline_15m`) and **maintain candles locally** (update the forming candle, finalize on close, append new rows). This keeps the rolling N-close window in sync without extra REST calls.
+        - Binance future REST API data: For backtest with market data in the past
+            - Call GET /fapi/v1/klines?symbol=<symbol>&interval=<interval> (default **15m**) for preparing market data in the past (candlestick list)
+            - Loop past candlestick market data and apply for each price in candlestick (OHLC) to: 
+                - Trigger strategy engine.
+                - Send to queue of simulation channels.
+    - Strategy engine: Calculate and trigger trade signal (side, symbol, price) without quantity then send to trading service queue (Simulate trade as default mode). Describe strategy as below:
+        - Load N recent candlesticks : use REST API GET /fapi/v1/klines?symbol=<symbol>&interval=<interval>.
+        - Identify peaks and troughs. It's not the hightest or the lowest. We will treat price action like a wave will have many peaks and troughs.
+        - Listen current price.
+        - Calculate average drawdown of current price with above peaks and troughs. Result are avg drawdown of top (base on peaks) and avg drawdown of bottom (base on troughs)
+        - If avg drawdown of top almost the same with avg drawdown of bottom (round 2 decimals) and avg must greater than fee , it means that current price is middle of the gap of these drawdown, then trigger trade signal (market order).
+        - The side of trade signal will is identified as: if peak is later -> SELL. If the trough is later -> BUY.
+        - Create take profit is avg drawdown of bottom if current position is SELL, avg drawdown of top if current position is BUY
+        - Create stoploss is avg drawdown of top if current position is SELL, avg drawdown of bottom if current position is BUY
+        - Summary idea: I try simulation price action happen around a gap (top and bottom of drawdown), momentum of price will go continue without turning around.
+
+
+Rules MUST follow:
+- Use English for coding, comment and documentation.
+- Techstack: springboot ecosystem.
+- Secret information must be loaded from system variable (.env file for manage)
+- Use lib https://github.com/binance/binance-futures-connector-java to make a connect/call to binance
+- Use docker compose file for manage services.
+- Latency for each service < 1s
