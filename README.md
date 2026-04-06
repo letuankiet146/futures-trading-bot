@@ -54,7 +54,8 @@ Expected behavior:
 - Behavior:
   - Loads historical klines by REST.
   - Replays each candle with 4-price path.
-  - Evaluates/publishes signals during replay.
+  - For each OHLC price: runs the strategy engine, then publishes `MARK` (and `SIGNAL` when fired) to Kafka topic `TOPIC_SIMULATE_REPLAY` so `simulate-service` can update mark and TP/SL/liquidation in order.
+  - Live mode still uses `strategy.signal` only; backtest uses the replay topic for ordered paper feed.
   - Exits automatically when `BACKTEST_STANDALONE_EXIT=true`.
 
 ## M4 additions (execute live path)

@@ -80,6 +80,7 @@ flowchart LR
 - Backtest runs inside `strategy-service` and can run standalone (profile/CLI mode).
 - Backtest is excluded from realtime latency SLO enforcement.
 - Backtest emission to Kafka is **only** valid when the stack is in `TRADING_MODE=SIMULATE` (see section 2.3.1); operators set the same `BACKTEST_ENABLED` and `TRADING_MODE` across Compose services.
+- For each OHLC step in backtest, `strategy-service` runs the strategy engine, then publishes an ordered **replay feed** to Kafka (`simulate-replay` topic): `MARK` rows (one per OHLC price) so `simulate-service` can update mark and evaluate TP/SL/liquidation, plus `SIGNAL` rows when the engine fires. Live streaming continues to use `strategy.signal` only.
 
 ---
 
@@ -149,6 +150,18 @@ flowchart LR
 - Backward-compatible additions only in v1 (`optional` field additions allowed).
 
 ### 7.3 Minimum required events
+
+#### `simulate.replay` (backtest only, ordered)
+
+Multiplexed JSON rows on topic `TOPIC_SIMULATE_REPLAY` (e.g. `BTCUSDT.simulate.replay`), same partition key as symbol so `MARK` and `SIGNAL` rows keep order:
+
+```json
+{ "schemaVersion": 1, "feedType": "MARK", "symbol": "BTCUSDT", "price": 0.0, "timestamp": "2026-04-06T00:00:00Z" }
+```
+
+```json
+{ "schemaVersion": 1, "feedType": "SIGNAL", "symbol": "BTCUSDT", "side": "BUY", "price": 0.0, "correlationId": "uuid", "timestamp": "2026-04-06T00:00:00Z" }
+```
 
 #### `strategy.signal` (required)
 ```json

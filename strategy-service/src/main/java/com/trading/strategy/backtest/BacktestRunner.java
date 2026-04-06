@@ -3,7 +3,7 @@ package com.trading.strategy.backtest;
 import com.trading.strategy.config.BacktestProperties;
 import com.trading.strategy.config.StrategyProperties;
 import com.trading.strategy.engine.StrategySignalEvaluator;
-import com.trading.strategy.kafka.StrategySignalPublisher;
+import com.trading.strategy.kafka.BacktestSimulateFeedPublisher;
 import com.trading.strategy.market.BinanceKlineRestClient;
 import com.trading.strategy.model.Candle;
 import com.trading.strategy.model.StrategyDecision;
@@ -25,7 +25,7 @@ public class BacktestRunner implements CommandLineRunner {
     private final StrategyProperties strategyProperties;
     private final BacktestProperties backtestProperties;
     private final StrategySignalEvaluator evaluator;
-    private final StrategySignalPublisher publisher;
+    private final BacktestSimulateFeedPublisher simulateFeedPublisher;
     private final ConfigurableApplicationContext applicationContext;
 
     public BacktestRunner(
@@ -33,13 +33,13 @@ public class BacktestRunner implements CommandLineRunner {
             StrategyProperties strategyProperties,
             BacktestProperties backtestProperties,
             StrategySignalEvaluator evaluator,
-            StrategySignalPublisher publisher,
+            BacktestSimulateFeedPublisher simulateFeedPublisher,
             ConfigurableApplicationContext applicationContext) {
         this.klineRestClient = klineRestClient;
         this.strategyProperties = strategyProperties;
         this.backtestProperties = backtestProperties;
         this.evaluator = evaluator;
-        this.publisher = publisher;
+        this.simulateFeedPublisher = simulateFeedPublisher;
         this.applicationContext = applicationContext;
     }
 
@@ -64,10 +64,13 @@ public class BacktestRunner implements CommandLineRunner {
 
             for (double mark : toPricePath(candle)) {
                 StrategyDecision decision = evaluator.evaluate(history, mark);
+                // Draft-idea: each OHLC step triggers strategy, then sends price to simulation channel (ordered MARK).
+                simulateFeedPublisher.publishMark(strategyProperties.getSymbol(), mark);
                 if (decision.shouldSignal()) {
-                    publisher.publishTestSignal(strategyProperties.getSymbol(), decision.side(), mark);
+                    simulateFeedPublisher.publishSignal(strategyProperties.getSymbol(), decision.side(), mark);
                     emitted++;
                 }
+                simulateFeedPublisher.flush();
             }
         }
 

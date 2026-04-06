@@ -43,6 +43,7 @@ app:
   kafka:
     topics:
       strategy-signal: ${TOPIC_STRATEGY_SIGNAL:BTCUSDT.strategy.signal}
+      simulate-replay: ${TOPIC_SIMULATE_REPLAY:BTCUSDT.simulate.replay}
   simulate:
     symbol: ${SYMBOL:BTCUSDT}
     leverage: ${LEVERAGE:20}
