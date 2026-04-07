@@ -9,6 +9,7 @@ public class PaperPosition {
     private double isolatedMargin;
     private double takeProfitPrice;
     private double stopLossPrice;
+    private double openFee;
     private boolean active;
 
     public String getSide() {
@@ -81,5 +82,13 @@ public class PaperPosition {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public double getOpenFee() {
+        return openFee;
+    }
+
+    public void setOpenFee(double openFee) {
+        this.openFee = openFee;
     }
 }

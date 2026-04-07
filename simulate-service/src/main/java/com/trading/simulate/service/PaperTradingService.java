@@ -135,6 +135,7 @@ public class PaperTradingService {
         position.setIsolatedMargin(margin);
         position.setTakeProfitPrice(tp);
         position.setStopLossPrice(sl);
+        position.setOpenFee(feeOpen);
 
         state.setOpenPosition(position);
         state.setBalanceUsdt(state.getBalanceUsdt() - feeOpen);
@@ -157,13 +158,14 @@ public class PaperTradingService {
         double closeNotional = pos.getQuantity() * closeMark;
         double feeClose = closeNotional * properties.getTakerFee();
         double net = pnl - feeClose;
+        double netAfterAllFees = net - pos.getOpenFee();
         state.setBalanceUsdt(state.getBalanceUsdt() + net);
         pos.setActive(false);
         state.setOpenPosition(null);
 
         PaperStats stats = state.getStats();
         stats.setTotalTrades(stats.getTotalTrades() + 1);
-        stats.setTotalPnl(stats.getTotalPnl() + net);
+        stats.setTotalPnl(stats.getTotalPnl() + netAfterAllFees);
         stats.setTotalFees(stats.getTotalFees() + feeClose);
         if ("TP".equals(reason)) {
             stats.setWinCount(stats.getWinCount() + 1);
@@ -190,7 +192,7 @@ public class PaperTradingService {
 
         PaperStats stats = state.getStats();
         stats.setTotalTrades(stats.getTotalTrades() + 1);
-        stats.setTotalPnl(stats.getTotalPnl() - realizedLoss);
+        stats.setTotalPnl(stats.getTotalPnl() - (realizedLoss + pos.getOpenFee()));
         stats.setLiquidationCount(stats.getLiquidationCount() + 1);
         persistenceService.saveFill(pos.getSymbol(), pos.getSide(), pos.getQuantity(), markPrice, "LIQUIDATED");
         persistenceService.saveSnapshot(state);
@@ -242,6 +244,7 @@ public class PaperTradingService {
             cp.setIsolatedMargin(p.getIsolatedMargin());
             cp.setTakeProfitPrice(p.getTakeProfitPrice());
             cp.setStopLossPrice(p.getStopLossPrice());
+            cp.setOpenFee(p.getOpenFee());
             cp.setActive(p.isActive());
             dst.setOpenPosition(cp);
         }
