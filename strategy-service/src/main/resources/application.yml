@@ -1,6 +1,18 @@
 spring:
   application:
     name: strategy-service
+  datasource:
+    url: ${STRATEGY_DB_URL:jdbc:postgresql://postgres:5432/trading}
+    username: ${STRATEGY_DB_USER:trading}
+    password: ${STRATEGY_DB_PASSWORD:trading}
+    hikari:
+      schema: strategy
+      connection-init-sql: SET search_path TO strategy
+  flyway:
+    enabled: true
+    schemas: strategy
+    default-schema: strategy
+    create-schemas: true
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -42,4 +54,7 @@ app:
   backtest:
     enabled: ${BACKTEST_ENABLED:false}
     standalone-exit: ${BACKTEST_STANDALONE_EXIT:true}
+    cli-on-startup: ${BACKTEST_CLI_ON_STARTUP:false}
     ohlc-order: ${BACKTEST_OHLC_ORDER:OHLC}
+  simulate:
+    base-url: ${SIMULATE_BASE_URL:http://simulate-service:8083}

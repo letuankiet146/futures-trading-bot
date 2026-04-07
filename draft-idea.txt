@@ -1,4 +1,4 @@
-[ DEPRECATED — do not use as specification. Canonical requirements are in question.md, question2.md, and question3.md (inline answers). This file is kept only as historical context. ]
+[ FOUNDATIONAL IDEA — this document is the core product intent. question*.md files provide clarifications and concrete decisions for ambiguous points. ]
 
 Let's build a micro services. Please following below services for corresponding purpose:
 

@@ -6,6 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class BacktestProperties {
     private boolean enabled;
     private boolean standaloneExit;
+    /** When true, run one-shot CLI backtest on startup (legacy). Default false: use REST API only. */
+    private boolean cliOnStartup;
     private String ohlcOrder;
 
     public boolean isEnabled() {
@@ -22,6 +24,14 @@ public class BacktestProperties {
 
     public void setStandaloneExit(boolean standaloneExit) {
         this.standaloneExit = standaloneExit;
+    }
+
+    public boolean isCliOnStartup() {
+        return cliOnStartup;
+    }
+
+    public void setCliOnStartup(boolean cliOnStartup) {
+        this.cliOnStartup = cliOnStartup;
     }
 
     public String getOhlcOrder() {

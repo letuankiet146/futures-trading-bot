@@ -6,7 +6,6 @@ import com.trading.execute.config.KafkaTopicsProperties;
 import com.trading.execute.service.ExecuteAuditService;
 import com.trading.execute.service.LatencyPolicyService;
 import com.trading.execute.service.LiveExecutionService;
-import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,8 +41,10 @@ public class LiveStrategySignalConsumer {
     @KafkaListener(
             topics = "${app.kafka.topics.strategy-signal}",
             groupId = "${spring.kafka.consumer.group-id}")
-    public void consume(ConsumerRecord<String, String> record, @Header(name = "correlationId", required = false) byte[] correlationHeader) {
-        String correlationId = correlationHeader == null ? "n/a" : new String(correlationHeader, StandardCharsets.UTF_8);
+    public void consume(
+            ConsumerRecord<String, String> record,
+            @Header(name = "correlationId", required = false) String correlationHeader) {
+        String correlationId = correlationHeader == null || correlationHeader.isBlank() ? "n/a" : correlationHeader;
         try {
             StrategySignalEvent event = objectMapper.readValue(record.value(), StrategySignalEvent.class);
             LatencyPolicyService.LatencyDecision latencyDecision =

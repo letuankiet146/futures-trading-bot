@@ -78,7 +78,7 @@ Answer: **Simplified model** for v1 (no full Binance liquidation formula). Posit
 
 - How should the strategy service **hydrate** and **update** closed candles without excessive REST calls?
 
-Answer: **Bootstrap with REST once** (or on reconnect): `GET /fapi/v1/klines` to load enough history for the strategy window. **Thereafter**, subscribe to the Binance Futures **kline WebSocket** for the configured interval (default **`15m`** per `question5.md` §4; e.g. `<symbol>@kline_15m`) and **maintain the candle series in memory (or local store)**—update the forming candle, finalize on candle close, append new bars. **Do not** poll REST on a timer for klines in steady state; rely on WS for incremental updates. **`markPrice`** stream remains separate for the 2s strategy tick. See canonical spec in `question.md` / `question2.md` (Market data engine); `draft-idea.txt` is deprecated.
+Answer: **Bootstrap with REST once** (or on reconnect): `GET /fapi/v1/klines` to load enough history for the strategy window. **Thereafter**, subscribe to the Binance Futures **kline WebSocket** for the configured interval (default **`15m`** per `question5.md` §4; e.g. `<symbol>@kline_15m`) and **maintain the candle series in memory (or local store)**—update the forming candle, finalize on candle close, append new bars. **Do not** poll REST on a timer for klines in steady state; rely on WS for incremental updates. **`markPrice`** stream remains separate for the 2s strategy tick. This refines the market-data intent in `draft-idea.txt` and is the implementation rule for v1.
 
 ---
 

@@ -62,7 +62,7 @@ You chose **environment-based** config (`question.md` §1). For v1, please confi
 
 ## 5. Service split vs. repo layout
 
-Original idea: **queue**, **execute** (risk + engine), **simulate**, **strategy** (`draft-idea.txt`, deprecated).
+Original idea: **queue**, **execute** (risk + engine), **simulate**, **strategy** (`draft-idea.txt`, core intent).
 
 - Confirm **v1** is still **four deployable services** (or fewer / more), and whether you want a **monorepo** with one Docker Compose or separate repos later.
 

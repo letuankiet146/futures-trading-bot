@@ -34,9 +34,9 @@ The stack is **implementation-ready** for core trading logic, risk, Kafka shape,
 
 Backtest uses REST klines + OHLC loop (`question.md` §6, `question2.md` §1).
 
-- Should **backtest** run as a **mode inside the strategy service** (CLI / profile), as a **separate Spring Boot main** in the monorepo, or **deferred** until after live/simulate paths work?
+- Should **backtest** run as a **mode inside the strategy service** and be triggered by REST API (with `startDate`/`endDate`), as a separate Spring Boot main in the monorepo, or deferred until after live/simulate paths work?
 
-**Answer:** Backtest runs **inside Strategy** and can be triggered in a **standalone mode**.
+**Answer:** Backtest runs **inside Strategy** and is triggered by REST API `GET` with query params `startDate` and `endDate`. The service must load candles from DB cache first, then fetch missing segments from Binance REST in batches up to `1500` klines/request, persist them, and run replay from cached data.
 
 ---
 

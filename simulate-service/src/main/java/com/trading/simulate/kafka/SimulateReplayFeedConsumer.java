@@ -6,7 +6,6 @@ import com.trading.contracts.event.StrategySignalEvent;
 import com.trading.simulate.config.KafkaTopicsProperties;
 import com.trading.simulate.service.LatencyPolicyService;
 import com.trading.simulate.service.PaperTradingService;
-import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,8 +42,10 @@ public class SimulateReplayFeedConsumer {
             topics = "${app.kafka.topics.simulate-replay}",
             groupId = "${KAFKA_GROUP_SIMULATE_REPLAY:simulate-service-replay}",
             concurrency = "1")
-    public void consume(ConsumerRecord<String, String> record, @Header(name = "correlationId", required = false) byte[] correlationHeader) {
-        String correlationId = correlationHeader == null ? "n/a" : new String(correlationHeader, StandardCharsets.UTF_8);
+    public void consume(
+            ConsumerRecord<String, String> record,
+            @Header(name = "correlationId", required = false) String correlationHeader) {
+        String correlationId = correlationHeader == null || correlationHeader.isBlank() ? "n/a" : correlationHeader;
         try {
             SimulateReplayFeedEvent feed = objectMapper.readValue(record.value(), SimulateReplayFeedEvent.class);
             String type = feed.getFeedType() == null ? "" : feed.getFeedType().trim().toUpperCase();

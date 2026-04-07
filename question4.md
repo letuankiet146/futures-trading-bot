@@ -1,30 +1,30 @@
-# `draft-idea.txt` vs canonical spec (archive)
+# `draft-idea.txt` vs implementation docs (alignment note)
 
-**`draft-idea.txt` is outdated.** It was the original brainstorm and **must not** be used as the reference for requirements or implementation.
+`draft-idea.txt` is the **core product idea**. `question*.md` and `peak-trough-spec.md` refine and operationalize ambiguous points for implementation.
 
-## Canonical specification
+## Reference order (authoritative precedence)
 
-Use these files **in order** (answers inline):
+Use these files **in order**:
 
-1. **`question.md`** — base decisions (stack, Kafka, risk, strategy parameters, modes, DB, etc.)
-2. **`question2.md`** — follow-up decisions (OHLC replay, sizing, liquidation, REST vs WS for candles, …)
-3. **`question3.md`** — edge cases (counters, margin parity, `MIN_NOTIONAL`, …)
-4. **`peak-trough-spec.md`** — **normative** peak/trough (swing) detection; referenced from `question.md` §4 and `question2.md` §4.
-5. **`question5.md`** — defaults (leverage, interval, exchange info, paper balance, risk day, position cycle).
-6. **`question6.md`** — §1–§2 answered (see **`question.md`**).
+1. **`draft-idea.txt`** — core scope and intent.
+2. **`question.md`** — base implementation decisions.
+3. **`question2.md`** — follow-up decisions.
+4. **`question3.md`** — edge-case decisions.
+5. **`peak-trough-spec.md`** — normative peak/trough detection algorithm.
+6. **`question5.md`**, **`question6.md`**, **`question7.md`**, **`question8.md`** — defaults and operational clarifications.
 
-Implementation and design reviews should cite the Q-files and **`peak-trough-spec.md`**, not `draft-idea.txt`.
+Implementation and design reviews should start from `draft-idea.txt`, then apply clarifications from the Q-files and `peak-trough-spec.md`.
 
 ---
 
-## What `draft-idea.txt` disagrees with (historical record only)
+## Known deltas between core idea and refinements
 
-These are **not** open questions — they are **spots where the old file still says something different** from the locked answers above. **Ignore `draft-idea.txt`** for these topics; the Q-files win.
+These are not open questions. They are places where later Q-file answers made an implementation-specific choice to refine the core idea.
 
-| Topic | Stale text in `draft-idea.txt` | Locked elsewhere |
+| Topic | Core text in `draft-idea.txt` | Refined decision |
 |--------|-------------------------------|------------------|
 | Peaks / troughs / “avg” drawdown | Many peaks/troughs, plural “averages” | **`peak-trough-spec.md`** + `question.md` §4 (aggregation / drawdown) |
-| Binance order API | “Use WS API for send request” | `question.md` §3 — **REST** for orders |
-| Latency | “each service under 1 second” | `question.md` §9 — **end-to-end** under 1 second |
+| Binance order API | “Use WS API for send request” | `question.md` §3 — **REST** for orders (connector compatibility and implementation stability) |
+| Latency | “each service under 1 second” | `question.md` §9 + `question7.md` §6 — **end-to-end** rule with warn/block thresholds |
 
-*(Optional)* If you ever need a single narrative document again, **derive a new spec from the Q-files**; do not resurrect `draft-idea.txt` as source of truth.
+If you need one narrative spec, derive it from **`draft-idea.txt` + all question files + `peak-trough-spec.md`**.

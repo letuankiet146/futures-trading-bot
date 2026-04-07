@@ -46,17 +46,22 @@ Expected behavior:
     - `|avg_top - avg_bottom| <= similarity_threshold`
     - `max(avg_top, avg_bottom) > 4 * taker_fee`
 
-### Backtest standalone mode
+### Backtest API mode
 
-- Enable in env:
+- Preconditions:
   - `BACKTEST_ENABLED=true`
+  - `TRADING_MODE=SIMULATE`
   - optional `BACKTEST_OHLC_ORDER=OHLC|OLHC`
+- Trigger:
+  - `POST /api/v1/backtest/run` with JSON body `{ "startDate": "<...>", "endDate": "<...>" }` (both optional; if **both omitted** or empty body `{}`, replays the **latest 1500** fully closed klines; if only `startDate`, end defaults to latest closed; `startDate` is **required** when `endDate` is set; values: **ISO-8601**, epoch ms string, or **date-only** per `implementation-spec-v1.md`).
+  - Response `202` + `jobId`; poll `GET /api/v1/backtest/jobs/{jobId}` for status and result.
 - Behavior:
-  - Loads historical klines by REST.
-  - Replays each candle with 4-price path.
-  - For each OHLC price: runs the strategy engine, then publishes `MARK` (and `SIGNAL` when fired) to Kafka topic `TOPIC_SIMULATE_REPLAY` so `simulate-service` can update mark and TP/SL/liquidation in order.
+  - Strategy checks DB kline cache first for requested symbol/interval/date range.
+  - If data is missing, strategy calls Binance REST klines with paged batches (max `1500` rows per request), anchored near `endDate`, and continues loading until `startDate` is covered.
+  - Newly loaded klines are persisted in DB for future runs (to avoid repeated Binance calls).
+  - Backtest replays each candle with 4-price path.
+  - For each OHLC price: runs strategy engine, then publishes `MARK` (and `SIGNAL` when fired) to Kafka topic `TOPIC_SIMULATE_REPLAY` so `simulate-service` can update mark and TP/SL/liquidation in order.
   - Live mode still uses `strategy.signal` only; backtest uses the replay topic for ordered paper feed.
-  - Exits automatically when `BACKTEST_STANDALONE_EXIT=true`.
 
 ## M4 additions (execute live path)
 
