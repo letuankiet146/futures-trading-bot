@@ -7,7 +7,6 @@ import com.trading.strategy.kafka.BacktestSimulateFeedPublisher;
 import com.trading.strategy.model.Candle;
 import com.trading.strategy.model.StrategyDecision;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -40,14 +39,17 @@ public class BacktestReplayService {
         String replayCorrelationId = correlationId == null || correlationId.isBlank()
                 ? UUID.randomUUID().toString()
                 : correlationId;
-        if (candles.size() < (2 * strategyProperties.getK() + 2)) {
+        int minCandles = 2 * strategyProperties.getK() + 2;
+        if (candles.size() < minCandles) {
             log.warn("Not enough candles for backtest replay: {}", candles.size());
             return 0;
         }
+        int windowN = strategyProperties.getN();
         int emitted = 0;
-        List<Candle> history = new ArrayList<>();
-        for (Candle candle : candles) {
-            history.add(candle);
+        for (int candleIdx = 0; candleIdx < candles.size(); candleIdx++) {
+            Candle candle = candles.get(candleIdx);
+            int windowStart = Math.max(0, candleIdx - windowN + 1);
+            List<Candle> history = candles.subList(windowStart, candleIdx + 1);
             if (history.size() < (2 * strategyProperties.getK() + 1)) {
                 continue;
             }
