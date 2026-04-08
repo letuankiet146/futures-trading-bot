@@ -18,29 +18,34 @@ public class SimulateBacktestSnapshotClient {
         this.restClient = RestClient.builder().baseUrl(baseUrl).build();
     }
 
-    public SimulateBacktestSnapshot fetchSnapshotOrNull() {
+    public SimulateBacktestSnapshot fetchSnapshotOrNull(String jobId) {
         try {
             SimulateStateDto state = restClient.get()
                     .uri("/api/v1/simulate/state")
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(SimulateStateDto.class);
-            if (state == null || state.stats == null) {
+            JobTimelineDto timeline = restClient.get()
+                    .uri("/api/v1/simulate/jobs/{jobId}/timeline", jobId)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(JobTimelineDto.class);
+            if (state == null || timeline == null || timeline.summary == null) {
                 return null;
             }
             return new SimulateBacktestSnapshot(
                     state.balanceUsdt,
                     state.lastMarkPrice,
                     state.frozen,
-                    state.stats.totalTrades,
-                    state.stats.winCount,
-                    state.stats.loseCount,
-                    state.stats.liquidationCount,
-                    state.stats.totalPnl,
-                    state.stats.totalFees,
+                    timeline.summary.totalTrades,
+                    timeline.summary.wins,
+                    timeline.summary.losses,
+                    timeline.summary.liquidations,
+                    timeline.summary.totalPnl,
+                    timeline.summary.totalFees,
                     state.openPosition != null && state.openPosition.active);
         } catch (Exception e) {
-            log.warn("Backtest simulate snapshot unavailable: {}", e.getMessage());
+            log.warn("Backtest simulate snapshot unavailable for jobId={}: {}", jobId, e.getMessage());
             return null;
         }
     }
@@ -50,17 +55,20 @@ public class SimulateBacktestSnapshotClient {
         public Double lastMarkPrice;
         public boolean frozen;
         public PositionDto openPosition;
-        public StatsDto stats;
     }
 
     private static class PositionDto {
         public boolean active;
     }
 
-    private static class StatsDto {
-        public int winCount;
-        public int loseCount;
-        public int liquidationCount;
+    private static class JobTimelineDto {
+        public SummaryDto summary;
+    }
+
+    private static class SummaryDto {
+        public int wins;
+        public int losses;
+        public int liquidations;
         public int totalTrades;
         public double totalPnl;
         public double totalFees;

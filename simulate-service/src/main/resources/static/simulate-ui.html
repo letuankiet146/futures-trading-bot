@@ -36,6 +36,9 @@
     const chartHost = document.getElementById('chart');
     const balanceHost = document.getElementById('balance');
     const fmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const localDateFmt = new Intl.DateTimeFormat(undefined, { year: '2-digit', month: '2-digit', day: '2-digit' });
+    const localTimeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const localTimeNoSecFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
     let priceChart = null;
     let balanceChart = null;
 
@@ -61,6 +64,10 @@
         return Array.from(bySec.values()).sort((a, b) => a.time - b.time);
     }
 
+    function normalizePriceLine(candles) {
+        return normalizeCandles(candles).map(c => ({ time: c.time, value: c.close }));
+    }
+
     function normalizeBalance(balance) {
         const bySec = new Map();
         for (const b of balance) {
@@ -83,7 +90,9 @@
             markers.push({
                 time: t,
                 position: (e.type === 'ENTRY' ? (e.side === 'BUY' ? 'belowBar' : 'aboveBar') : 'aboveBar'),
-                color: e.type === 'ENTRY' ? '#26a69a' : (e.type === 'TP' ? '#4caf50' : (e.type === 'SL' ? '#ef5350' : '#ff9800')),
+                color: e.type === 'ENTRY'
+                    ? (e.side === 'BUY' ? '#4caf50' : '#ef5350')
+                    : (e.type === 'TP' ? '#4caf50' : (e.type === 'SL' ? '#ef5350' : '#ff9800')),
                 shape: e.type === 'ENTRY' ? 'arrowUp' : 'circle',
                 text: `${e.type} @ ${e.price.toFixed(2)}`
             });
@@ -98,14 +107,46 @@
         balanceChart = null;
     }
 
-    function addCandlestickSeriesCompat(chart, options) {
-        if (typeof chart.addCandlestickSeries === 'function') {
-            return chart.addCandlestickSeries(options || {});
+    function toLocalDateFromChartTime(time) {
+        if (typeof time === 'number') {
+            return new Date(time * 1000);
         }
-        if (typeof chart.addSeries === 'function' && LightweightCharts.CandlestickSeries) {
-            return chart.addSeries(LightweightCharts.CandlestickSeries, options || {});
+        if (time && typeof time === 'object' && Number.isFinite(time.year) && Number.isFinite(time.month) && Number.isFinite(time.day)) {
+            return new Date(time.year, time.month - 1, time.day);
         }
-        throw new Error('Unsupported Lightweight Charts version for candlestick series');
+        return new Date(NaN);
+    }
+
+    function formatChartTimeLocal(time) {
+        const d = toLocalDateFromChartTime(time);
+        if (!Number.isFinite(d.getTime())) return '';
+        return `${localDateFmt.format(d)} ${localTimeFmt.format(d)}`;
+    }
+
+    function formatTickMarkLocal(time, tickMarkType) {
+        const d = toLocalDateFromChartTime(time);
+        if (!Number.isFinite(d.getTime())) return '';
+        if (tickMarkType === 'DayOfMonth') return localDateFmt.format(d);
+        if (tickMarkType === 'TimeWithSeconds') return localTimeFmt.format(d);
+        return localTimeNoSecFmt.format(d);
+    }
+
+    function buildChartOptions() {
+        return {
+            layout: { background: { color: '#111' }, textColor: '#ddd' },
+            grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
+            rightPriceScale: { borderColor: '#444' },
+            timeScale: {
+                borderColor: '#444',
+                timeVisible: true,
+                secondsVisible: true,
+                tickMarkFormatter: formatTickMarkLocal
+            },
+            localization: {
+                locale: navigator.language,
+                timeFormatter: formatChartTimeLocal
+            }
+        };
     }
 
     function addLineSeriesCompat(chart, options) {
@@ -132,25 +173,15 @@
 
     function renderTimeline(data) {
         clearCharts();
-        priceChart = LightweightCharts.createChart(chartHost, {
-            layout: { background: { color: '#111' }, textColor: '#ddd' },
-            grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
-            rightPriceScale: { borderColor: '#444' },
-            timeScale: { borderColor: '#444', timeVisible: true, secondsVisible: true }
-        });
-        const candleSeries = addCandlestickSeriesCompat(priceChart);
-        const candleData = normalizeCandles(data.candles);
-        candleSeries.setData(candleData);
+        priceChart = LightweightCharts.createChart(chartHost, buildChartOptions());
+        const priceSeries = addLineSeriesCompat(priceChart, { color: '#26a69a', lineWidth: 2 });
+        const priceData = normalizePriceLine(data.candles);
+        priceSeries.setData(priceData);
 
         const markers = normalizeMarkers(data.events);
-        setMarkersCompat(candleSeries, markers);
+        setMarkersCompat(priceSeries, markers);
 
-        balanceChart = LightweightCharts.createChart(balanceHost, {
-            layout: { background: { color: '#111' }, textColor: '#ddd' },
-            grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
-            rightPriceScale: { borderColor: '#444' },
-            timeScale: { borderColor: '#444', timeVisible: true, secondsVisible: true }
-        });
+        balanceChart = LightweightCharts.createChart(balanceHost, buildChartOptions());
         const balanceSeries = addLineSeriesCompat(balanceChart, { color: '#4fc3f7', lineWidth: 2 });
         const balanceData = normalizeBalance(data.balance);
         balanceSeries.setData(balanceData);

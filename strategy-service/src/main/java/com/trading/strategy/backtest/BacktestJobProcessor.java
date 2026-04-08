@@ -97,7 +97,7 @@ public class BacktestJobProcessor {
             backfill.ensureRangeCached(symbol, interval, effStartOpen, effEndOpen);
             List<Candle> candles = klineCache.findCandlesInRange(symbol, interval, effStartOpen, effEndOpen);
             int signals = replayService.replay(candles, jobId.toString());
-            SimulateBacktestSnapshot snapshot = simulateSnapshotClient.fetchSnapshotOrNull();
+            SimulateBacktestSnapshot snapshot = simulateSnapshotClient.fetchSnapshotOrNull(jobId.toString());
             jobRepo.markSucceeded(jobId, candles.size(), snapshot);
             log.info(
                     "Backtest job {} SUCCEEDED candles={} signals={}",
@@ -128,7 +128,7 @@ public class BacktestJobProcessor {
         long effEnd = closed.get(closed.size() - 1).getOpenTime();
         jobRepo.updateEffectiveRange(jobId, effStart, effEnd);
         int signals = replayService.replay(closed, jobId.toString());
-        SimulateBacktestSnapshot snapshot = simulateSnapshotClient.fetchSnapshotOrNull();
+        SimulateBacktestSnapshot snapshot = simulateSnapshotClient.fetchSnapshotOrNull(jobId.toString());
         jobRepo.markSucceeded(jobId, closed.size(), snapshot);
         log.info(
                 "Backtest job {} SUCCEEDED (last-1500) candles={} signals={}",
