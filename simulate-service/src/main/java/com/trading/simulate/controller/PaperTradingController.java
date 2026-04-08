@@ -1,11 +1,14 @@
 package com.trading.simulate.controller;
 
 import com.trading.simulate.config.SimulateProperties;
+import com.trading.simulate.model.JobTimeline;
 import com.trading.simulate.model.PaperAccountState;
 import com.trading.simulate.service.PaperTradingService;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,6 +33,15 @@ public class PaperTradingController {
     @GetMapping("/state")
     public PaperAccountState state() {
         return paperTradingService.snapshot();
+    }
+
+    @GetMapping("/jobs/{jobId}/timeline")
+    public JobTimeline timeline(@PathVariable("jobId") @Pattern(regexp = "^[A-Za-z0-9._:-]+$") String jobId) {
+        JobTimeline timeline = paperTradingService.timeline(jobId);
+        if (timeline.candles().isEmpty() && timeline.events().isEmpty() && timeline.balance().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown jobId: " + jobId);
+        }
+        return timeline;
     }
 
     @PostMapping("/mark")

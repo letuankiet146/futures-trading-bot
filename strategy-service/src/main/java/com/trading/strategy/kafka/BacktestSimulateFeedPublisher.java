@@ -6,14 +6,11 @@ import com.trading.contracts.event.SimulateReplayFeedEvent;
 import com.trading.strategy.config.KafkaTopicsProperties;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
-import java.time.Instant;
 import java.util.Set;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 
@@ -40,25 +37,26 @@ public class BacktestSimulateFeedPublisher {
         this.topicsProperties = topicsProperties;
     }
 
-    public void publishMark(String symbol, double price) {
-        SimulateReplayFeedEvent event = baseEvent(symbol, price, SimulateReplayFeedEvent.TYPE_MARK);
-        send(event, null);
+    public void publishMark(String symbol, double price, String correlationId, String timestamp) {
+        SimulateReplayFeedEvent event = baseEvent(symbol, price, SimulateReplayFeedEvent.TYPE_MARK, timestamp);
+        event.setCorrelationId(correlationId);
+        send(event, correlationId);
     }
 
-    public void publishSignal(String symbol, String side, double price) {
-        SimulateReplayFeedEvent event = baseEvent(symbol, price, SimulateReplayFeedEvent.TYPE_SIGNAL);
+    public void publishSignal(String symbol, String side, double price, String correlationId, String timestamp) {
+        SimulateReplayFeedEvent event = baseEvent(symbol, price, SimulateReplayFeedEvent.TYPE_SIGNAL, timestamp);
         event.setSide(side);
-        event.setCorrelationId(UUID.randomUUID().toString());
-        send(event, event.getCorrelationId());
+        event.setCorrelationId(correlationId);
+        send(event, correlationId);
     }
 
-    private static SimulateReplayFeedEvent baseEvent(String symbol, double price, String feedType) {
+    private static SimulateReplayFeedEvent baseEvent(String symbol, double price, String feedType, String timestamp) {
         SimulateReplayFeedEvent event = new SimulateReplayFeedEvent();
         event.setSchemaVersion(1);
         event.setFeedType(feedType);
         event.setSymbol(symbol);
         event.setPrice(price);
-        event.setTimestamp(Instant.now().toString());
+        event.setTimestamp(timestamp);
         return event;
     }
 
@@ -67,10 +65,14 @@ public class BacktestSimulateFeedPublisher {
         if (!violations.isEmpty()) {
             throw new IllegalArgumentException("Invalid simulate replay payload: " + violations);
         }
-        if (SimulateReplayFeedEvent.TYPE_SIGNAL.equals(event.getFeedType())) {
-            if (event.getSide() == null || event.getSide().isBlank() || event.getCorrelationId() == null) {
-                throw new IllegalArgumentException("SIGNAL replay rows require side and correlationId");
-            }
+        boolean needsCorrelationId = SimulateReplayFeedEvent.TYPE_SIGNAL.equals(event.getFeedType())
+                || SimulateReplayFeedEvent.TYPE_MARK.equals(event.getFeedType());
+        if (needsCorrelationId && (event.getCorrelationId() == null || event.getCorrelationId().isBlank())) {
+            throw new IllegalArgumentException("Replay rows require correlationId");
+        }
+        if (SimulateReplayFeedEvent.TYPE_SIGNAL.equals(event.getFeedType())
+                && (event.getSide() == null || event.getSide().isBlank())) {
+            throw new IllegalArgumentException("SIGNAL replay rows require side");
         }
         try {
             String payload = objectMapper.writeValueAsString(event);

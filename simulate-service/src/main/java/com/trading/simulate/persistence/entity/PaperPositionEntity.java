@@ -28,6 +28,8 @@ public class PaperPositionEntity {
     private double stopLossPrice;
     @Column(nullable = false, length = 32)
     private String status;
+    @Column(length = 128)
+    private String correlationId;
     @Column(nullable = false)
     private Instant openedAt;
 
@@ -46,6 +48,8 @@ public class PaperPositionEntity {
     public void setStopLossPrice(double stopLossPrice) { this.stopLossPrice = stopLossPrice; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getCorrelationId() { return correlationId; }
+    public void setCorrelationId(String correlationId) { this.correlationId = correlationId; }
     public Instant getOpenedAt() { return openedAt; }
     public void setOpenedAt(Instant openedAt) { this.openedAt = openedAt; }
 }

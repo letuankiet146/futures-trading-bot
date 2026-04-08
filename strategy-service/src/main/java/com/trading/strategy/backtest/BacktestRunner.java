@@ -5,8 +5,7 @@ import com.trading.strategy.config.StrategyProperties;
 import com.trading.strategy.market.BinanceKlineRestClient;
 import com.trading.strategy.model.Candle;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.UUID;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -20,8 +19,6 @@ import org.springframework.stereotype.Component;
         name = {"app.backtest.enabled", "app.backtest.cli-on-startup"},
         havingValue = "true")
 public class BacktestRunner implements CommandLineRunner {
-    private static final Logger log = LoggerFactory.getLogger(BacktestRunner.class);
-
     private final BinanceKlineRestClient klineRestClient;
     private final StrategyProperties strategyProperties;
     private final BacktestProperties backtestProperties;
@@ -47,7 +44,7 @@ public class BacktestRunner implements CommandLineRunner {
                 strategyProperties.getSymbol(),
                 strategyProperties.getInterval(),
                 strategyProperties.getN());
-        replayService.replay(all);
+        replayService.replay(all, UUID.randomUUID().toString());
 
         if (backtestProperties.isStandaloneExit()) {
             int code = org.springframework.boot.SpringApplication.exit(applicationContext, () -> 0);

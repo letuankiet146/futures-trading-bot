@@ -1,6 +1,9 @@
 package com.trading.simulate.model;
 
+import java.time.Instant;
+
 public class PaperPosition {
+    private String jobId;
     private String side;
     private String symbol;
     private double entryPrice;
@@ -11,6 +14,15 @@ public class PaperPosition {
     private double stopLossPrice;
     private double openFee;
     private boolean active;
+    private Instant openedAt;
+
+    public String getJobId() {
+        return jobId;
+    }
+
+    public void setJobId(String jobId) {
+        this.jobId = jobId;
+    }
 
     public String getSide() {
         return side;
@@ -90,5 +102,13 @@ public class PaperPosition {
 
     public void setOpenFee(double openFee) {
         this.openFee = openFee;
+    }
+
+    public Instant getOpenedAt() {
+        return openedAt;
+    }
+
+    public void setOpenedAt(Instant openedAt) {
+        this.openedAt = openedAt;
     }
 }

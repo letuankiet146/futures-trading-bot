@@ -9,7 +9,7 @@ COPY simulate-service/pom.xml simulate-service/pom.xml
 RUN mvn -q -DskipTests dependency:go-offline
 
 COPY . .
-RUN mvn -q -DskipTests -pl strategy-service -am package
+RUN mvn -q -DskipTests -pl strategy-service -am clean package
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app

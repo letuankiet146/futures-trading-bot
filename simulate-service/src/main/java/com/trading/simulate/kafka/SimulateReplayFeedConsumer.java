@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trading.contracts.event.SimulateReplayFeedEvent;
 import com.trading.contracts.event.StrategySignalEvent;
 import com.trading.simulate.config.KafkaTopicsProperties;
-import com.trading.simulate.service.LatencyPolicyService;
 import com.trading.simulate.service.PaperTradingService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -25,17 +24,14 @@ public class SimulateReplayFeedConsumer {
     private final ObjectMapper objectMapper;
     private final KafkaTopicsProperties topicsProperties;
     private final PaperTradingService paperTradingService;
-    private final LatencyPolicyService latencyPolicyService;
 
     public SimulateReplayFeedConsumer(
             ObjectMapper objectMapper,
             KafkaTopicsProperties topicsProperties,
-            PaperTradingService paperTradingService,
-            LatencyPolicyService latencyPolicyService) {
+            PaperTradingService paperTradingService) {
         this.objectMapper = objectMapper;
         this.topicsProperties = topicsProperties;
         this.paperTradingService = paperTradingService;
-        this.latencyPolicyService = latencyPolicyService;
     }
 
     @KafkaListener(
@@ -51,7 +47,7 @@ public class SimulateReplayFeedConsumer {
             String type = feed.getFeedType() == null ? "" : feed.getFeedType().trim().toUpperCase();
             if (SimulateReplayFeedEvent.TYPE_MARK.equals(type)) {
                 log.debug("SIMULATE replay MARK symbol={} price={}", feed.getSymbol(), feed.getPrice());
-                paperTradingService.onMarkPrice(feed.getPrice());
+                paperTradingService.onReplayMarkPrice(feed.getPrice(), feed.getCorrelationId(), feed.getTimestamp());
                 return;
             }
             if (SimulateReplayFeedEvent.TYPE_SIGNAL.equals(type)) {
@@ -62,9 +58,6 @@ public class SimulateReplayFeedConsumer {
                 event.setPrice(feed.getPrice());
                 event.setCorrelationId(feed.getCorrelationId());
                 event.setTimestamp(feed.getTimestamp());
-                if (latencyPolicyService.shouldBlock(event.getCorrelationId(), event.getTimestamp())) {
-                    return;
-                }
                 log.info("SIMULATE replay SIGNAL correlationId={} symbol={} side={} topic={}",
                         correlationId, event.getSymbol(), event.getSide(), topicsProperties.getSimulateReplay());
                 paperTradingService.onStrategySignal(event);

@@ -6,8 +6,10 @@ import com.trading.strategy.engine.StrategySignalEvaluator;
 import com.trading.strategy.kafka.BacktestSimulateFeedPublisher;
 import com.trading.strategy.model.Candle;
 import com.trading.strategy.model.StrategyDecision;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -34,7 +36,10 @@ public class BacktestReplayService {
     }
 
     /** @return number of strategy signals emitted */
-    public int replay(List<Candle> candles) {
+    public int replay(List<Candle> candles, String correlationId) {
+        String replayCorrelationId = correlationId == null || correlationId.isBlank()
+                ? UUID.randomUUID().toString()
+                : correlationId;
         if (candles.size() < (2 * strategyProperties.getK() + 2)) {
             log.warn("Not enough candles for backtest replay: {}", candles.size());
             return 0;
@@ -46,11 +51,16 @@ public class BacktestReplayService {
             if (history.size() < (2 * strategyProperties.getK() + 1)) {
                 continue;
             }
-            for (double mark : toPricePath(candle)) {
+            List<Double> path = toPricePath(candle);
+            for (int i = 0; i < path.size(); i++) {
+                double mark = path.get(i);
+                String eventTimestamp = toReplayTimestamp(candle, i, path.size());
                 StrategyDecision decision = evaluator.evaluate(history, mark);
-                simulateFeedPublisher.publishMark(strategyProperties.getSymbol(), mark);
+                simulateFeedPublisher.publishMark(
+                        strategyProperties.getSymbol(), mark, replayCorrelationId, eventTimestamp);
                 if (decision.shouldSignal()) {
-                    simulateFeedPublisher.publishSignal(strategyProperties.getSymbol(), decision.side(), mark);
+                    simulateFeedPublisher.publishSignal(
+                            strategyProperties.getSymbol(), decision.side(), mark, replayCorrelationId, eventTimestamp);
                     emitted++;
                 }
                 simulateFeedPublisher.flush();
@@ -72,5 +82,15 @@ public class BacktestReplayService {
             return List.of(candle.getOpen(), candle.getLow(), candle.getHigh(), candle.getClose());
         }
         return List.of(candle.getOpen(), candle.getHigh(), candle.getLow(), candle.getClose());
+    }
+
+    private String toReplayTimestamp(Candle candle, int stepIndex, int totalSteps) {
+        long start = candle.getOpenTime();
+        long end = candle.getCloseTime();
+        if (totalSteps <= 1 || end <= start) {
+            return Instant.ofEpochMilli(start).toString();
+        }
+        long offset = ((end - start) * stepIndex) / (totalSteps - 1);
+        return Instant.ofEpochMilli(start + offset).toString();
     }
 }

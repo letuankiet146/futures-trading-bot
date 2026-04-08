@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simulation Timeline</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background: #111; color: #eee; }
+        .top { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+        .top input { padding: 6px 8px; min-width: 280px; }
+        .top button { padding: 6px 10px; cursor: pointer; }
+        #chart { width: 100%; height: 460px; border: 1px solid #333; }
+        #balance { width: 100%; height: 200px; border: 1px solid #333; margin-top: 14px; }
+        .meta { margin-top: 10px; color: #bbb; font-size: 13px; }
+        .error { color: #ff6b6b; margin-top: 10px; }
+    </style>
+</head>
+<body>
+<div class="top">
+    <label for="jobId">jobId</label>
+    <input id="jobId" placeholder="correlationId" />
+    <button id="loadBtn">Load</button>
+</div>
+<div id="chart"></div>
+<div id="balance"></div>
+<div class="meta" id="meta"></div>
+<div class="error" id="error"></div>
+
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const jobIdInput = document.getElementById('jobId');
+    const loadBtn = document.getElementById('loadBtn');
+    const errorEl = document.getElementById('error');
+    const metaEl = document.getElementById('meta');
+    const chartHost = document.getElementById('chart');
+    const balanceHost = document.getElementById('balance');
+    const fmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    let priceChart = null;
+    let balanceChart = null;
+
+    function toEpochSec(isoTime) {
+        return Math.floor(new Date(isoTime).getTime() / 1000);
+    }
+
+    function normalizeCandles(candles) {
+        const bySec = new Map();
+        for (const c of candles) {
+            const t = toEpochSec(c.time);
+            if (!Number.isFinite(t)) continue;
+            const prev = bySec.get(t);
+            if (!prev) {
+                bySec.set(t, { time: t, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume || 0 });
+                continue;
+            }
+            prev.high = Math.max(prev.high, c.high);
+            prev.low = Math.min(prev.low, c.low);
+            prev.close = c.close;
+            prev.volume = (prev.volume || 0) + (c.volume || 0);
+        }
+        return Array.from(bySec.values()).sort((a, b) => a.time - b.time);
+    }
+
+    function normalizeBalance(balance) {
+        const bySec = new Map();
+        for (const b of balance) {
+            const t = toEpochSec(b.time);
+            if (!Number.isFinite(t)) continue;
+            bySec.set(t, { time: t, value: b.balanceUsdt });
+        }
+        return Array.from(bySec.values()).sort((a, b) => a.time - b.time);
+    }
+
+    function normalizeMarkers(events) {
+        const markers = [];
+        const used = new Set();
+        for (const e of events) {
+            const t = toEpochSec(e.time);
+            if (!Number.isFinite(t)) continue;
+            const key = `${t}|${e.type}|${e.side}|${e.price}`;
+            if (used.has(key)) continue;
+            used.add(key);
+            markers.push({
+                time: t,
+                position: (e.type === 'ENTRY' ? (e.side === 'BUY' ? 'belowBar' : 'aboveBar') : 'aboveBar'),
+                color: e.type === 'ENTRY' ? '#26a69a' : (e.type === 'TP' ? '#4caf50' : (e.type === 'SL' ? '#ef5350' : '#ff9800')),
+                shape: e.type === 'ENTRY' ? 'arrowUp' : 'circle',
+                text: `${e.type} @ ${e.price.toFixed(2)}`
+            });
+        }
+        return markers.sort((a, b) => a.time - b.time);
+    }
+
+    function clearCharts() {
+        chartHost.innerHTML = '';
+        balanceHost.innerHTML = '';
+        priceChart = null;
+        balanceChart = null;
+    }
+
+    function addCandlestickSeriesCompat(chart, options) {
+        if (typeof chart.addCandlestickSeries === 'function') {
+            return chart.addCandlestickSeries(options || {});
+        }
+        if (typeof chart.addSeries === 'function' && LightweightCharts.CandlestickSeries) {
+            return chart.addSeries(LightweightCharts.CandlestickSeries, options || {});
+        }
+        throw new Error('Unsupported Lightweight Charts version for candlestick series');
+    }
+
+    function addLineSeriesCompat(chart, options) {
+        if (typeof chart.addLineSeries === 'function') {
+            return chart.addLineSeries(options || {});
+        }
+        if (typeof chart.addSeries === 'function' && LightweightCharts.LineSeries) {
+            return chart.addSeries(LightweightCharts.LineSeries, options || {});
+        }
+        throw new Error('Unsupported Lightweight Charts version for line series');
+    }
+
+    function setMarkersCompat(series, markers) {
+        if (typeof series.setMarkers === 'function') {
+            series.setMarkers(markers);
+            return;
+        }
+        if (typeof LightweightCharts.createSeriesMarkers === 'function') {
+            LightweightCharts.createSeriesMarkers(series, markers);
+            return;
+        }
+        console.warn('Series markers are not supported in this Lightweight Charts build');
+    }
+
+    function renderTimeline(data) {
+        clearCharts();
+        priceChart = LightweightCharts.createChart(chartHost, {
+            layout: { background: { color: '#111' }, textColor: '#ddd' },
+            grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
+            rightPriceScale: { borderColor: '#444' },
+            timeScale: { borderColor: '#444', timeVisible: true, secondsVisible: true }
+        });
+        const candleSeries = addCandlestickSeriesCompat(priceChart);
+        const candleData = normalizeCandles(data.candles);
+        candleSeries.setData(candleData);
+
+        const markers = normalizeMarkers(data.events);
+        setMarkersCompat(candleSeries, markers);
+
+        balanceChart = LightweightCharts.createChart(balanceHost, {
+            layout: { background: { color: '#111' }, textColor: '#ddd' },
+            grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
+            rightPriceScale: { borderColor: '#444' },
+            timeScale: { borderColor: '#444', timeVisible: true, secondsVisible: true }
+        });
+        const balanceSeries = addLineSeriesCompat(balanceChart, { color: '#4fc3f7', lineWidth: 2 });
+        const balanceData = normalizeBalance(data.balance);
+        balanceSeries.setData(balanceData);
+
+        const summary = data.summary;
+        const firstEvent = data.events[0]?.time;
+        const lastEvent = data.events[data.events.length - 1]?.time;
+        metaEl.textContent = [
+            `jobId=${data.jobId}`,
+            `wins=${summary.wins}`,
+            `losses=${summary.losses}`,
+            `liquidations=${summary.liquidations}`,
+            `trades=${summary.totalTrades}`,
+            `pnl=${summary.totalPnl.toFixed(4)}`,
+            `fees=${summary.totalFees.toFixed(4)}`,
+            firstEvent ? `start(local)=${fmt.format(new Date(firstEvent))}` : null,
+            lastEvent ? `end(local)=${fmt.format(new Date(lastEvent))}` : null
+        ].filter(Boolean).join(' | ');
+    }
+
+    async function loadJobTimeline() {
+        errorEl.textContent = '';
+        metaEl.textContent = '';
+        const jobId = jobIdInput.value.trim();
+        if (!jobId) {
+            errorEl.textContent = 'Please provide jobId in query param or input.';
+            return;
+        }
+        try {
+            const resp = await fetch(`/api/v1/simulate/jobs/${encodeURIComponent(jobId)}/timeline`);
+            if (!resp.ok) {
+                errorEl.textContent = `Failed to load timeline: HTTP ${resp.status}`;
+                clearCharts();
+                return;
+            }
+            const data = await resp.json();
+            renderTimeline(data);
+        } catch (err) {
+            errorEl.textContent = `Error: ${err}`;
+            clearCharts();
+        }
+    }
+
+    loadBtn.addEventListener('click', loadJobTimeline);
+    jobIdInput.value = params.get('jobId') || '';
+    if (jobIdInput.value) {
+        loadJobTimeline();
+    }
+</script>
+</body>
+</html>
