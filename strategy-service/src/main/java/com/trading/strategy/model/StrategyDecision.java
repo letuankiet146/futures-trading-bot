@@ -4,5 +4,7 @@ public record StrategyDecision(
         boolean shouldSignal,
         String side,
         double avgTop,
-        double avgBottom) {
+        double avgBottom,
+        /** Last closed candle close; used as signal execution reference when {@link #shouldSignal} is true. */
+        double signalPrice) {
 }

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
+/** Swing highs/lows from candle wicks: peaks compare {@link Candle#getHigh()}, troughs {@link Candle#getLow()}. */
 @Component
 public class PeakTroughScanner {
     public List<SwingPoint> findPeaks(List<Candle> candles, int k) {

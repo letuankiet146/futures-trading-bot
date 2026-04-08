@@ -39,9 +39,9 @@ public class BacktestReplayService {
         String replayCorrelationId = correlationId == null || correlationId.isBlank()
                 ? UUID.randomUUID().toString()
                 : correlationId;
-        int minCandles = 2 * strategyProperties.getK() + 2;
+        int minCandles = Math.max(strategyProperties.getN(), 2 * strategyProperties.getK() + 2);
         if (candles.size() < minCandles) {
-            log.warn("Not enough candles for backtest replay: {}", candles.size());
+            log.warn("Not enough candles for backtest replay: need at least {} have {}", minCandles, candles.size());
             return 0;
         }
         int windowN = strategyProperties.getN();
@@ -50,7 +50,7 @@ public class BacktestReplayService {
             Candle candle = candles.get(candleIdx);
             int windowStart = Math.max(0, candleIdx - windowN + 1);
             List<Candle> history = candles.subList(windowStart, candleIdx + 1);
-            if (history.size() < (2 * strategyProperties.getK() + 1)) {
+            if (history.size() < windowN) {
                 continue;
             }
             List<Double> path = toPricePath(candle);
@@ -62,7 +62,11 @@ public class BacktestReplayService {
                         strategyProperties.getSymbol(), mark, replayCorrelationId, eventTimestamp);
                 if (decision.shouldSignal()) {
                     simulateFeedPublisher.publishSignal(
-                            strategyProperties.getSymbol(), decision.side(), mark, replayCorrelationId, eventTimestamp);
+                            strategyProperties.getSymbol(),
+                            decision.side(),
+                            decision.signalPrice(),
+                            replayCorrelationId,
+                            eventTimestamp);
                     emitted++;
                 }
                 simulateFeedPublisher.flush();

@@ -62,8 +62,8 @@ public class LiveSignalTrigger {
             return;
         }
 
-        publisher.publishTestSignal(strategyProperties.getSymbol(), decision.side(), mark);
-        log.info("Signal emitted side={} mark={} avgTop={} avgBottom={}",
-                decision.side(), mark, decision.avgTop(), decision.avgBottom());
+        publisher.publishTestSignal(strategyProperties.getSymbol(), decision.side(), decision.signalPrice());
+        log.info("Signal emitted side={} signalPrice(close)={} mark={} avgTop={} avgBottom={}",
+                decision.side(), decision.signalPrice(), mark, decision.avgTop(), decision.avgBottom());
     }
 }

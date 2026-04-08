@@ -18,10 +18,14 @@ public class StrategySignalEvaluator {
     }
 
     public StrategyDecision evaluate(List<Candle> closedCandles, double markPrice) {
-        if (closedCandles.size() < (2 * strategyProperties.getK() + 1)) {
-            return new StrategyDecision(false, "NONE", 0.0, 0.0);
+        int nWindow = strategyProperties.getN();
+        int minBarsForSwing = 2 * strategyProperties.getK() + 1;
+        int requiredSize = Math.max(nWindow, minBarsForSwing);
+        if (closedCandles.size() < requiredSize) {
+            return new StrategyDecision(false, "NONE", 0.0, 0.0, 0.0);
         }
 
+        // 1) Full N-bar window: scan every peak / trough in range, then 2) average drawdowns over those sets.
         List<SwingPoint> peaks = scanner.findPeaks(closedCandles, strategyProperties.getK());
         List<SwingPoint> troughs = scanner.findTroughs(closedCandles, strategyProperties.getK());
 
@@ -38,13 +42,14 @@ public class StrategySignalEvaluator {
         boolean feeEnough = Math.max(avgTop, avgBottom) > feeGate;
 
         if (!isMiddle || !feeEnough || peaks.isEmpty() || troughs.isEmpty()) {
-            return new StrategyDecision(false, "NONE", avgTop, avgBottom);
+            return new StrategyDecision(false, "NONE", avgTop, avgBottom, 0.0);
         }
 
         SwingPoint latestPeak = peaks.get(peaks.size() - 1);
         SwingPoint latestTrough = troughs.get(troughs.size() - 1);
         String side = latestPeak.index() > latestTrough.index() ? "SELL" : "BUY";
 
-        return new StrategyDecision(true, side, avgTop, avgBottom);
+        double lastClose = closedCandles.get(closedCandles.size() - 1).getClose();
+        return new StrategyDecision(true, side, avgTop, avgBottom, lastClose);
     }
 }
