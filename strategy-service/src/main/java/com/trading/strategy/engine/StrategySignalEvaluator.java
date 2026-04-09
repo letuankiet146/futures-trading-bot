@@ -37,7 +37,7 @@ public class StrategySignalEvaluator {
                 : troughs.stream().mapToDouble(t -> (markPrice - t.price()) / t.price()).average().orElse(0.0);
 
         double diff = Math.abs(avgTop - avgBottom);
-        double feeGate = 4.0 * strategyProperties.getTakerFee();
+        double feeGate = strategyProperties.getFeeGateMultiplier() * strategyProperties.getTakerFee();
         boolean isMiddle = diff <= strategyProperties.getSimilarityThreshold();
         boolean feeEnough = Math.max(avgTop, avgBottom) > feeGate;
 

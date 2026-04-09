@@ -9,6 +9,7 @@ public class StrategyProperties {
     private int n;
     private int k;
     private double takerFee;
+    private double feeGateMultiplier;
     private double similarityThreshold;
     private long triggerMs;
     private long minSignalIntervalMs;
@@ -59,6 +60,14 @@ public class StrategyProperties {
 
     public void setSimilarityThreshold(double similarityThreshold) {
         this.similarityThreshold = similarityThreshold;
+    }
+
+    public double getFeeGateMultiplier() {
+        return feeGateMultiplier;
+    }
+
+    public void setFeeGateMultiplier(double feeGateMultiplier) {
+        this.feeGateMultiplier = feeGateMultiplier;
     }
 
     public long getTriggerMs() {
