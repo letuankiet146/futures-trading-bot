@@ -1,6 +1,7 @@
 package com.trading.strategy.backtest;
 
 import com.trading.strategy.persistence.SimulateBacktestSnapshot;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,49 +21,42 @@ public class SimulateBacktestSnapshotClient {
 
     public SimulateBacktestSnapshot fetchSnapshotOrNull(String jobId) {
         try {
-            SimulateStateDto state = restClient.get()
-                    .uri("/api/v1/simulate/state")
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .body(SimulateStateDto.class);
             JobTimelineDto timeline = restClient.get()
                     .uri("/api/v1/simulate/jobs/{jobId}/timeline", jobId)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(JobTimelineDto.class);
-            if (state == null || timeline == null || timeline.summary == null) {
+            if (timeline == null || timeline.summary == null) {
                 return null;
             }
+            Double finalBalance = null;
+            if (timeline.balance != null && !timeline.balance.isEmpty()) {
+                finalBalance = timeline.balance.get(timeline.balance.size() - 1).balanceUsdt;
+            }
             return new SimulateBacktestSnapshot(
-                    state.balanceUsdt,
-                    state.lastMarkPrice,
-                    state.frozen,
+                    finalBalance,
+                    null,
+                    null,
                     timeline.summary.totalTrades,
                     timeline.summary.wins,
                     timeline.summary.losses,
                     timeline.summary.liquidations,
                     timeline.summary.totalPnl,
                     timeline.summary.totalFees,
-                    state.openPosition != null && state.openPosition.active);
+                    null);
         } catch (Exception e) {
             log.warn("Backtest simulate snapshot unavailable for jobId={}: {}", jobId, e.getMessage());
             return null;
         }
     }
 
-    private static class SimulateStateDto {
-        public Double balanceUsdt;
-        public Double lastMarkPrice;
-        public boolean frozen;
-        public PositionDto openPosition;
-    }
-
-    private static class PositionDto {
-        public boolean active;
-    }
-
     private static class JobTimelineDto {
         public SummaryDto summary;
+        public List<BalancePointDto> balance;
+    }
+
+    private static class BalancePointDto {
+        public Double balanceUsdt;
     }
 
     private static class SummaryDto {

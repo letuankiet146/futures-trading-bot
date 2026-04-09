@@ -2,8 +2,10 @@ package com.trading.strategy.controller;
 
 import com.trading.strategy.backtest.support.BacktestDateParser;
 import com.trading.strategy.backtest.BacktestJobService;
+import com.trading.strategy.backtest.SimulateBacktestSnapshotClient;
 import com.trading.strategy.persistence.BacktestJobRepository;
 import com.trading.strategy.persistence.BacktestJobRow;
+import com.trading.strategy.persistence.SimulateBacktestSnapshot;
 import com.trading.strategy.backtest.BacktestRequestSentinels;
 import java.net.URI;
 import java.time.Instant;
@@ -28,9 +30,11 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class BacktestController {
 
     private final BacktestJobService jobService;
+    private final SimulateBacktestSnapshotClient simulateSnapshotClient;
 
-    public BacktestController(BacktestJobService jobService) {
+    public BacktestController(BacktestJobService jobService, SimulateBacktestSnapshotClient simulateSnapshotClient) {
         this.jobService = jobService;
+        this.simulateSnapshotClient = simulateSnapshotClient;
     }
 
     @PostMapping("/run")
@@ -80,7 +84,11 @@ public class BacktestController {
         BacktestJobRow row = jobService
                 .getJob(jobId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown jobId"));
-        return BacktestJobStatusResponse.from(row);
+        SimulateBacktestSnapshot liveSnapshot = null;
+        if (BacktestJobRepository.STATUS_SUCCEEDED.equals(row.status())) {
+            liveSnapshot = simulateSnapshotClient.fetchSnapshotOrNull(jobId.toString());
+        }
+        return BacktestJobStatusResponse.from(row, liveSnapshot);
     }
 
     /** If both {@code startDate} and {@code endDate} are absent, the job uses the latest 1500 fully closed klines. */
@@ -99,7 +107,7 @@ public class BacktestController {
             String errorMessage,
             Result result) {
 
-        static BacktestJobStatusResponse from(BacktestJobRow row) {
+        static BacktestJobStatusResponse from(BacktestJobRow row, SimulateBacktestSnapshot liveSnapshot) {
             Instant effStart = row.effectiveStartMs() != null
                     ? Instant.ofEpochMilli(row.effectiveStartMs())
                     : null;
@@ -107,7 +115,21 @@ public class BacktestController {
             Result res = null;
             if (BacktestJobRepository.STATUS_SUCCEEDED.equals(row.status()) && row.candlesReplayed() != null) {
                 SimulateResult sim = null;
-                if (row.simBalanceUsdt() != null) {
+                if (liveSnapshot != null) {
+                    sim = new SimulateResult(
+                            liveSnapshot.balanceUsdt() != null ? liveSnapshot.balanceUsdt() : row.simBalanceUsdt(),
+                            liveSnapshot.lastMarkPrice() != null ? liveSnapshot.lastMarkPrice() : row.simLastMarkPrice(),
+                            liveSnapshot.frozen() != null ? liveSnapshot.frozen() : row.simFrozen(),
+                            liveSnapshot.totalTrades(),
+                            liveSnapshot.winCount(),
+                            liveSnapshot.loseCount(),
+                            liveSnapshot.liquidationCount(),
+                            liveSnapshot.totalPnl(),
+                            liveSnapshot.totalFees(),
+                            liveSnapshot.openPositionActive() != null
+                                    ? liveSnapshot.openPositionActive()
+                                    : row.simOpenPositionActive());
+                } else if (row.simBalanceUsdt() != null) {
                     sim = new SimulateResult(
                             row.simBalanceUsdt(),
                             row.simLastMarkPrice(),

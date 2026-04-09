@@ -112,7 +112,9 @@
                 color: e.type === 'ENTRY'
                     ? (e.side === 'BUY' ? '#4caf50' : '#ef5350')
                     : (e.type === 'TP' ? '#4caf50' : (e.type === 'SL' ? '#ef5350' : '#ff9800')),
-                shape: e.type === 'ENTRY' ? 'arrowUp' : 'circle',
+                shape: e.type === 'ENTRY'
+                    ? (e.side === 'BUY' ? 'arrowUp' : 'arrowDown')
+                    : 'circle',
                 text: `${e.type} @ ${e.price.toFixed(2)}`
             });
         }

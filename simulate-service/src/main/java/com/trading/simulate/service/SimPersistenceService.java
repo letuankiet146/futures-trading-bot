@@ -1,5 +1,6 @@
 package com.trading.simulate.service;
 
+import com.trading.simulate.config.SimulateProperties;
 import com.trading.simulate.model.PaperAccountState;
 import com.trading.simulate.model.JobTimeline;
 import com.trading.simulate.model.JobTimelineBalance;
@@ -40,6 +41,7 @@ public class SimPersistenceService {
     private final JobTradeEventRepository jobTradeEventRepository;
     private final JobBalanceSnapshotRepository jobBalanceSnapshotRepository;
     private final StrategyBacktestChartDataRepository strategyBacktestChartDataRepository;
+    private final SimulateProperties simulateProperties;
 
     public SimPersistenceService(
             PaperAccountSnapshotRepository snapshotRepository,
@@ -49,7 +51,8 @@ public class SimPersistenceService {
             JobCandleRepository jobCandleRepository,
             JobTradeEventRepository jobTradeEventRepository,
             JobBalanceSnapshotRepository jobBalanceSnapshotRepository,
-            StrategyBacktestChartDataRepository strategyBacktestChartDataRepository) {
+            StrategyBacktestChartDataRepository strategyBacktestChartDataRepository,
+            SimulateProperties simulateProperties) {
         this.snapshotRepository = snapshotRepository;
         this.orderRepository = orderRepository;
         this.positionRepository = positionRepository;
@@ -58,6 +61,7 @@ public class SimPersistenceService {
         this.jobTradeEventRepository = jobTradeEventRepository;
         this.jobBalanceSnapshotRepository = jobBalanceSnapshotRepository;
         this.strategyBacktestChartDataRepository = strategyBacktestChartDataRepository;
+        this.simulateProperties = simulateProperties;
     }
 
     public void saveSnapshot(PaperAccountState state) {
@@ -159,6 +163,11 @@ public class SimPersistenceService {
         int losses = (int) events.stream().filter(e -> "SL".equals(e.type())).count();
         int liquidations = (int) events.stream().filter(e -> "LIQUIDATED".equals(e.type())).count();
         int totalTrades = wins + losses + liquidations;
+        double takerFeeRate = simulateProperties.getTakerFee();
+        double totalFees = events.stream()
+                .filter(e -> "ENTRY".equals(e.type()) || "TP".equals(e.type()) || "SL".equals(e.type()))
+                .mapToDouble(e -> e.price() * e.quantity() * takerFeeRate)
+                .sum();
         double totalPnl = 0.0;
         if (balance.size() >= 2) {
             totalPnl = balance.get(balance.size() - 1).balanceUsdt() - balance.get(0).balanceUsdt();
@@ -169,7 +178,7 @@ public class SimPersistenceService {
                 liquidations,
                 totalTrades,
                 totalPnl,
-                0.0);
+                totalFees);
         return new JobTimeline(jobId, chartCandles, events, balance, summary);
     }
 
