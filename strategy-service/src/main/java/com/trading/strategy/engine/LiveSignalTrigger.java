@@ -63,7 +63,17 @@ public class LiveSignalTrigger {
         }
 
         publisher.publishTestSignal(strategyProperties.getSymbol(), decision.side(), decision.signalPrice());
-        log.info("Signal emitted side={} signalPrice(close)={} mark={} avgTop={} avgBottom={}",
-                decision.side(), decision.signalPrice(), mark, decision.avgTop(), decision.avgBottom());
+        var oldest = candles.get(0);
+        var newest = candles.get(candles.size() - 1);
+        log.info(
+                "Signal emitted side={} windowBars={} oldestOpen={} newestOpen={} signalPrice(close)={} mark={} avgTop={} avgBottom={}",
+                decision.side(),
+                candles.size(),
+                Instant.ofEpochMilli(oldest.getOpenTime()),
+                Instant.ofEpochMilli(newest.getOpenTime()),
+                decision.signalPrice(),
+                mark,
+                decision.avgTop(),
+                decision.avgBottom());
     }
 }

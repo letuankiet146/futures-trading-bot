@@ -22,8 +22,12 @@ import com.trading.simulate.persistence.repository.PaperAccountSnapshotRepositor
 import com.trading.simulate.persistence.repository.PaperFillRepository;
 import com.trading.simulate.persistence.repository.PaperOrderRepository;
 import com.trading.simulate.persistence.repository.PaperPositionRepository;
+import com.trading.simulate.persistence.strategy.StrategyBacktestChartDataRepository;
+import com.trading.simulate.persistence.strategy.StrategyBacktestChartDataRepository.BacktestJobKlineRange;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -35,6 +39,7 @@ public class SimPersistenceService {
     private final JobCandleRepository jobCandleRepository;
     private final JobTradeEventRepository jobTradeEventRepository;
     private final JobBalanceSnapshotRepository jobBalanceSnapshotRepository;
+    private final StrategyBacktestChartDataRepository strategyBacktestChartDataRepository;
 
     public SimPersistenceService(
             PaperAccountSnapshotRepository snapshotRepository,
@@ -43,7 +48,8 @@ public class SimPersistenceService {
             PaperFillRepository fillRepository,
             JobCandleRepository jobCandleRepository,
             JobTradeEventRepository jobTradeEventRepository,
-            JobBalanceSnapshotRepository jobBalanceSnapshotRepository) {
+            JobBalanceSnapshotRepository jobBalanceSnapshotRepository,
+            StrategyBacktestChartDataRepository strategyBacktestChartDataRepository) {
         this.snapshotRepository = snapshotRepository;
         this.orderRepository = orderRepository;
         this.positionRepository = positionRepository;
@@ -51,6 +57,7 @@ public class SimPersistenceService {
         this.jobCandleRepository = jobCandleRepository;
         this.jobTradeEventRepository = jobTradeEventRepository;
         this.jobBalanceSnapshotRepository = jobBalanceSnapshotRepository;
+        this.strategyBacktestChartDataRepository = strategyBacktestChartDataRepository;
     }
 
     public void saveSnapshot(PaperAccountState state) {
@@ -141,9 +148,7 @@ public class SimPersistenceService {
     }
 
     public JobTimeline loadTimeline(String jobId) {
-        List<JobTimelineCandle> candles = jobCandleRepository.findByJobIdOrderByTsAsc(jobId).stream()
-                .map(c -> new JobTimelineCandle(c.getTs(), c.getOpen(), c.getHigh(), c.getLow(), c.getClose(), c.getVolume()))
-                .toList();
+        List<JobTimelineCandle> chartCandles = loadChartCandlesFromStrategyOrFallback(jobId);
         List<JobTimelineEvent> events = jobTradeEventRepository.findByJobIdOrderByEventTimeAsc(jobId).stream()
                 .map(e -> new JobTimelineEvent(e.getEventType(), e.getSide(), e.getPrice(), e.getQuantity(), e.getTp(), e.getSl(), e.getEventTime()))
                 .toList();
@@ -165,6 +170,41 @@ public class SimPersistenceService {
                 totalTrades,
                 totalPnl,
                 0.0);
-        return new JobTimeline(jobId, candles, events, balance, summary);
+        return new JobTimeline(jobId, chartCandles, events, balance, summary);
+    }
+
+    /**
+     * Prefer OHLC from {@code strategy.backtest_kline} for the job's effective range (same rows strategy uses when
+     * evaluating). If the job id is not a UUID, the job row is missing, or klines are absent, fall back to mark replay
+     * points in {@code simulate.job_candle}.
+     */
+    private List<JobTimelineCandle> loadChartCandlesFromStrategyOrFallback(String jobId) {
+        Optional<UUID> jobUuid = parseUuid(jobId);
+        if (jobUuid.isPresent()) {
+            Optional<BacktestJobKlineRange> rangeOpt =
+                    strategyBacktestChartDataRepository.findJobKlineRange(jobUuid.get());
+            if (rangeOpt.isPresent() && rangeOpt.get().isComplete()) {
+                BacktestJobKlineRange r = rangeOpt.get();
+                List<JobTimelineCandle> fromStrategy = strategyBacktestChartDataRepository.findKlinesInRange(
+                        r.symbol(), r.klineInterval(), r.effectiveStartMs(), r.effectiveEndMs());
+                if (!fromStrategy.isEmpty()) {
+                    return fromStrategy;
+                }
+            }
+        }
+        return jobCandleRepository.findByJobIdOrderByTsAsc(jobId).stream()
+                .map(c -> new JobTimelineCandle(c.getTs(), c.getOpen(), c.getHigh(), c.getLow(), c.getClose(), c.getVolume()))
+                .toList();
+    }
+
+    private static Optional<UUID> parseUuid(String jobId) {
+        if (jobId == null || jobId.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(UUID.fromString(jobId.trim()));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
     }
 }

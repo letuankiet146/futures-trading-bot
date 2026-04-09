@@ -64,10 +64,6 @@
         return Array.from(bySec.values()).sort((a, b) => a.time - b.time);
     }
 
-    function normalizePriceLine(candles) {
-        return normalizeCandles(candles).map(c => ({ time: c.time, value: c.close }));
-    }
-
     function normalizeBalance(balance) {
         const bySec = new Map();
         for (const b of balance) {
@@ -78,11 +74,34 @@
         return Array.from(bySec.values()).sort((a, b) => a.time - b.time);
     }
 
-    function normalizeMarkers(events) {
+    /** Map event instant to the candle bar time (open) of the bar that contains it — markers align with candlesticks. */
+    function snapEventToBarTimeSec(eventIso, barsAsc) {
+        const eventSec = toEpochSec(eventIso);
+        if (!Number.isFinite(eventSec) || !barsAsc.length) return eventSec;
+        let lo = 0;
+        let hi = barsAsc.length - 1;
+        let best = barsAsc[0].time;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            const t = barsAsc[mid].time;
+            if (t <= eventSec) {
+                best = t;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return best;
+    }
+
+    function normalizeMarkers(events, candleBarsAsc) {
         const markers = [];
         const used = new Set();
+        const bars = candleBarsAsc && candleBarsAsc.length ? candleBarsAsc : null;
         for (const e of events) {
-            const t = toEpochSec(e.time);
+            const rawSec = toEpochSec(e.time);
+            if (!Number.isFinite(rawSec)) continue;
+            const t = bars ? snapEventToBarTimeSec(e.time, bars) : rawSec;
             if (!Number.isFinite(t)) continue;
             const key = `${t}|${e.type}|${e.side}|${e.price}`;
             if (used.has(key)) continue;
@@ -159,6 +178,16 @@
         throw new Error('Unsupported Lightweight Charts version for line series');
     }
 
+    function addCandlestickSeriesCompat(chart, options) {
+        if (typeof chart.addCandlestickSeries === 'function') {
+            return chart.addCandlestickSeries(options || {});
+        }
+        if (typeof chart.addSeries === 'function' && LightweightCharts.CandlestickSeries) {
+            return chart.addSeries(LightweightCharts.CandlestickSeries, options || {});
+        }
+        throw new Error('Unsupported Lightweight Charts version for candlestick series');
+    }
+
     function setMarkersCompat(series, markers) {
         if (typeof series.setMarkers === 'function') {
             series.setMarkers(markers);
@@ -174,11 +203,24 @@
     function renderTimeline(data) {
         clearCharts();
         priceChart = LightweightCharts.createChart(chartHost, buildChartOptions());
-        const priceSeries = addLineSeriesCompat(priceChart, { color: '#26a69a', lineWidth: 2 });
-        const priceData = normalizePriceLine(data.candles);
-        priceSeries.setData(priceData);
+        const barData = normalizeCandles(data.candles);
+        const candleData = barData.map(c => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close
+        }));
+        const priceSeries = addCandlestickSeriesCompat(priceChart, {
+            upColor: '#26a69a',
+            downColor: '#ef5350',
+            borderVisible: false,
+            wickUpColor: '#26a69a',
+            wickDownColor: '#ef5350'
+        });
+        priceSeries.setData(candleData);
 
-        const markers = normalizeMarkers(data.events);
+        const markers = normalizeMarkers(data.events, barData);
         setMarkersCompat(priceSeries, markers);
 
         balanceChart = LightweightCharts.createChart(balanceHost, buildChartOptions());
