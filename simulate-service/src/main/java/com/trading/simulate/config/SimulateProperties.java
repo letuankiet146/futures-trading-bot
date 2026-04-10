@@ -7,6 +7,7 @@ public class SimulateProperties {
     private String symbol;
     private int leverage;
     private double takerFee;
+    private double feeGateMultiplier;
     private double initialBalanceUsdt;
     private Sizing sizing = new Sizing();
     private Liquidation liquidation = new Liquidation();
@@ -35,6 +36,14 @@ public class SimulateProperties {
 
     public void setTakerFee(double takerFee) {
         this.takerFee = takerFee;
+    }
+
+    public double getFeeGateMultiplier() {
+        return feeGateMultiplier;
+    }
+
+    public void setFeeGateMultiplier(double feeGateMultiplier) {
+        this.feeGateMultiplier = feeGateMultiplier;
     }
 
     public double getInitialBalanceUsdt() {

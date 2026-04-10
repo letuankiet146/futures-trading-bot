@@ -48,6 +48,7 @@ app:
     symbol: ${SYMBOL:BTCUSDT}
     leverage: ${LEVERAGE:20}
     taker-fee: ${TAKER_FEE:0.0005}
+    fee-gate-multiplier: ${FEE_GATE_MULTIPLIER:4.0}
     initial-balance-usdt: ${SIM_INITIAL_BALANCE_USDT:500}
     sizing:
       mode: ${SIZING_MODE:PERCENT}

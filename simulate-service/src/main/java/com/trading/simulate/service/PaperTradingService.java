@@ -108,7 +108,7 @@ public class PaperTradingService {
         double margin = notional / Math.max(1, properties.getLeverage());
         double feeOpen = notional * properties.getTakerFee();
 
-        double distanceRate = 4 * properties.getTakerFee();
+        double distanceRate = properties.getFeeGateMultiplier() * properties.getTakerFee();
         double tp;
         double sl;
         if ("BUY".equalsIgnoreCase(side)) {
