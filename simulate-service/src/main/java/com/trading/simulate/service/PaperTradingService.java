@@ -53,9 +53,18 @@ public class PaperTradingService {
             }
             Instant eventTime = parseEventTime(event.getTimestamp());
             onMarkPriceInternal(event.getPrice(), jobId, eventTime);
-            if (state.getOpenPosition() != null && state.getOpenPosition().isActive()) {
-                // Single active trade cycle in v1: ignore new entries while a position is open.
-                return;
+            PaperPosition active = state.getOpenPosition();
+            if (active != null && active.isActive()) {
+                String signalSide = event.getSide() == null ? "" : event.getSide().trim().toUpperCase();
+                String activeSide = active.getSide() == null ? "" : active.getSide().trim().toUpperCase();
+                if (!signalSide.isBlank() && !activeSide.isBlank() && !activeSide.equals(signalSide)) {
+                    // Reverse-on-signal: close current leg first (effectively cancels its TP/SL), then open new side.
+                    auditService.log("POSITION_REVERSED", jobId, "Reverse signal closes current position before re-entry");
+                    closePosition(event.getPrice(), "REVERSE", eventTime);
+                } else {
+                    // Same-side signal while position is active: ignore.
+                    return;
+                }
             }
             openPosition(event.getSymbol(), event.getSide(), event.getPrice(), jobId, eventTime);
         }
@@ -167,6 +176,12 @@ public class PaperTradingService {
         stats.setTotalFees(stats.getTotalFees() + feeClose);
         if ("TP".equals(reason)) {
             stats.setWinCount(stats.getWinCount() + 1);
+        } else if ("REVERSE".equals(reason)) {
+            if (netAfterAllFees >= 0) {
+                stats.setWinCount(stats.getWinCount() + 1);
+            } else {
+                stats.setLoseCount(stats.getLoseCount() + 1);
+            }
         } else {
             stats.setLoseCount(stats.getLoseCount() + 1);
         }
@@ -191,16 +206,15 @@ public class PaperTradingService {
         if (pos == null || !pos.isActive()) {
             return;
         }
-        double pnl = computePnl(pos, markPrice);
-        double realizedLoss = Math.max(0.0, -pnl);
-        state.setBalanceUsdt(state.getBalanceUsdt() - realizedLoss);
+        // Isolated mode: liquidation only wipes the notional allocated to this position.
+        double liquidationLoss = pos.getNotional();
+        state.setBalanceUsdt(Math.max(0.0, state.getBalanceUsdt() - liquidationLoss));
         pos.setActive(false);
         state.setOpenPosition(null);
-        state.setFrozen(true);
 
         PaperStats stats = state.getStats();
         stats.setTotalTrades(stats.getTotalTrades() + 1);
-        stats.setTotalPnl(stats.getTotalPnl() - (realizedLoss + pos.getOpenFee()));
+        stats.setTotalPnl(stats.getTotalPnl() - (liquidationLoss + pos.getOpenFee()));
         stats.setLiquidationCount(stats.getLiquidationCount() + 1);
         persistenceService.saveFill(pos.getSymbol(), pos.getSide(), pos.getQuantity(), markPrice, "LIQUIDATED");
         persistenceService.saveTradeEvent(
@@ -214,8 +228,9 @@ public class PaperTradingService {
                 eventTime);
         persistenceService.saveJobBalance(pos.getJobId(), state.getBalanceUsdt(), eventTime);
         persistenceService.saveSnapshot(state);
-        auditService.log("LIQUIDATION", pos.getJobId(), "Paper liquidation and freeze");
-        log.warn("Paper liquidation occurred at mark={} realizedLoss={} account frozen until reset", markPrice, realizedLoss);
+        auditService.log("LIQUIDATION", pos.getJobId(), "Paper isolated liquidation");
+        log.warn("Paper isolated liquidation occurred at mark={} liquidationLoss={} account remains active",
+                markPrice, liquidationLoss);
     }
 
     private double computePnl(PaperPosition pos, double markPrice) {
