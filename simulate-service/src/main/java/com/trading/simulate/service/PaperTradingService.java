@@ -118,14 +118,16 @@ public class PaperTradingService {
         double feeOpen = notional * properties.getTakerFee();
 
         double distanceRate = properties.getFeeGateMultiplier() * properties.getTakerFee();
+        double tpDistanceRate = distanceRate * properties.getTpMultiplier();
+        double slDistanceRate = distanceRate * properties.getSlMultiplier();
         double tp;
         double sl;
         if ("BUY".equalsIgnoreCase(side)) {
-            tp = entryMark * (1 + distanceRate);
-            sl = entryMark * (1 - distanceRate);
+            tp = entryMark * (1 + tpDistanceRate);
+            sl = entryMark * (1 - slDistanceRate);
         } else {
-            tp = entryMark * (1 - distanceRate);
-            sl = entryMark * (1 + distanceRate);
+            tp = entryMark * (1 - tpDistanceRate);
+            sl = entryMark * (1 + slDistanceRate);
         }
 
         PaperPosition position = new PaperPosition();

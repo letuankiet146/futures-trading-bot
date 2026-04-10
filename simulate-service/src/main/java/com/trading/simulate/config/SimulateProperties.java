@@ -8,6 +8,8 @@ public class SimulateProperties {
     private int leverage;
     private double takerFee;
     private double feeGateMultiplier;
+    private double tpMultiplier;
+    private double slMultiplier;
     private double initialBalanceUsdt;
     private Sizing sizing = new Sizing();
     private Liquidation liquidation = new Liquidation();
@@ -44,6 +46,22 @@ public class SimulateProperties {
 
     public void setFeeGateMultiplier(double feeGateMultiplier) {
         this.feeGateMultiplier = feeGateMultiplier;
+    }
+
+    public double getTpMultiplier() {
+        return tpMultiplier;
+    }
+
+    public void setTpMultiplier(double tpMultiplier) {
+        this.tpMultiplier = tpMultiplier;
+    }
+
+    public double getSlMultiplier() {
+        return slMultiplier;
+    }
+
+    public void setSlMultiplier(double slMultiplier) {
+        this.slMultiplier = slMultiplier;
     }
 
     public double getInitialBalanceUsdt() {
