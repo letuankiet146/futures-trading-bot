@@ -202,7 +202,7 @@ public class SimPersistenceService {
             }
         }
         return jobCandleRepository.findByJobIdOrderByTsAsc(jobId).stream()
-                .map(c -> new JobTimelineCandle(c.getTs(), c.getOpen(), c.getHigh(), c.getLow(), c.getClose(), c.getVolume()))
+                .map(c -> new JobTimelineCandle(c.getTs(), c.getOpen(), c.getHigh(), c.getLow(), c.getClose(), c.getVolume(), 0.0, 0.0))
                 .toList();
     }
 

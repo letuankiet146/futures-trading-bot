@@ -9,6 +9,12 @@ public class Candle {
     private double close;
     private boolean closed;
 
+    // Quote asset volume
+    private double quoteAssetVolume;
+
+    // Taker buy quote asset volume
+    private double takerQuoteAssetVolume;
+
     public long getOpenTime() {
         return openTime;
     }
@@ -63,5 +69,21 @@ public class Candle {
 
     public void setClosed(boolean closed) {
         this.closed = closed;
+    }
+
+    public double getQuoteAssetVolume() {
+        return quoteAssetVolume;
+    }
+
+    public void setQuoteAssetVolume(double quoteAssetVolume) {
+        this.quoteAssetVolume = quoteAssetVolume;
+    }
+
+    public double getTakerQuoteAssetVolume() {
+        return takerQuoteAssetVolume;
+    }
+
+    public void setTakerQuoteAssetVolume(double takerQuoteAssetVolume) {
+        this.takerQuoteAssetVolume = takerQuoteAssetVolume;
     }
 }

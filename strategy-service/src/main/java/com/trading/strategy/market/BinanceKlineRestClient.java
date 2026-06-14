@@ -80,6 +80,8 @@ public class BinanceKlineRestClient {
                 candle.setLow(row.get(3).asDouble());
                 candle.setClose(row.get(4).asDouble());
                 candle.setCloseTime(row.get(6).asLong());
+                candle.setQuoteAssetVolume(row.get(7).asDouble());
+                candle.setTakerQuoteAssetVolume(row.get(10).asDouble());
                 candle.setClosed(true);
                 result.add(candle);
             }

@@ -22,7 +22,9 @@ public class StrategyBacktestChartDataRepository {
             rs.getDouble("high_price"),
             rs.getDouble("low_price"),
             rs.getDouble("close_price"),
-            0.0);
+            rs.getDouble("quote_asset_volume"),
+            rs.getDouble("quote_asset_volume"),
+            rs.getDouble("taker_quote_asset_volume"));
 
     private final JdbcTemplate jdbc;
 
@@ -55,7 +57,8 @@ public class StrategyBacktestChartDataRepository {
         try {
             return jdbc.query(
                     """
-                    SELECT open_time_ms, open_price, high_price, low_price, close_price
+                    SELECT open_time_ms, open_price, high_price, low_price, close_price,
+                           quote_asset_volume, taker_quote_asset_volume
                     FROM strategy.backtest_kline
                     WHERE symbol = ? AND kline_interval = ?
                       AND open_time_ms >= ? AND open_time_ms <= ?

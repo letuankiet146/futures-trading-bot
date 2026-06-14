@@ -10,9 +10,21 @@
         .top input { padding: 6px 8px; min-width: 280px; }
         .top button { padding: 6px 10px; cursor: pointer; }
         #chart { width: 100%; height: 460px; border: 1px solid #333; }
+        #rsi { width: 100%; height: 160px; border: 1px solid #333; margin-top: 14px; }
+        #ratio { width: 100%; height: 160px; border: 1px solid #333; margin-top: 14px; }
         #balance { width: 100%; height: 200px; border: 1px solid #333; margin-top: 14px; }
         .meta { margin-top: 10px; color: #bbb; font-size: 13px; }
         .error { color: #ff6b6b; margin-top: 10px; }
+        .indicators { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
+        .indicators h3 { margin: 0 0 8px; font-size: 14px; color: #f0c000; }
+        .ind-section { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+        .ind-group { display: flex; flex-direction: column; gap: 6px; }
+        .ind-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+        .ind-row label.name { width: 44px; color: #ccc; }
+        .ind-row input[type="number"] { width: 64px; padding: 4px 6px; background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; }
+        .ind-row input[type="color"] { width: 28px; height: 24px; padding: 0; border: 1px solid #444; background: #222; border-radius: 4px; cursor: pointer; }
+        .ind-divider { width: 1px; align-self: stretch; background: #333; }
+        .apply-btn { padding: 6px 14px; cursor: pointer; background: #f0c000; color: #111; border: none; border-radius: 4px; font-weight: bold; align-self: center; }
     </style>
 </head>
 <body>
@@ -21,7 +33,70 @@
     <input id="jobId" placeholder="correlationId" />
     <button id="loadBtn">Load</button>
 </div>
+
+<div class="indicators">
+    <h3>Indicators</h3>
+    <div class="ind-section">
+        <div class="ind-group" id="emaGroup">
+            <div style="font-size:13px;color:#aaa;margin-bottom:2px;">EMA &ndash; Exponential Moving Average</div>
+            <div class="ind-row">
+                <input type="checkbox" id="ema1On" checked />
+                <label class="name" for="ema1Period">EMA1</label>
+                <input type="number" id="ema1Period" min="1" max="1000" value="7" />
+                <input type="color" id="ema1Color" value="#f0c000" />
+            </div>
+            <div class="ind-row">
+                <input type="checkbox" id="ema2On" checked />
+                <label class="name" for="ema2Period">EMA2</label>
+                <input type="number" id="ema2Period" min="1" max="1000" value="25" />
+                <input type="color" id="ema2Color" value="#e040fb" />
+            </div>
+            <div class="ind-row">
+                <input type="checkbox" id="ema3On" checked />
+                <label class="name" for="ema3Period">EMA3</label>
+                <input type="number" id="ema3Period" min="1" max="1000" value="99" />
+                <input type="color" id="ema3Color" value="#b388ff" />
+            </div>
+        </div>
+        <div class="ind-divider"></div>
+        <div class="ind-group" id="rsiGroup">
+            <div style="font-size:13px;color:#aaa;margin-bottom:2px;">RSI &ndash; Relative Strength Index</div>
+            <div class="ind-row">
+                <input type="checkbox" id="rsiOn" checked />
+                <label class="name" for="rsiPeriod">RSI</label>
+                <input type="number" id="rsiPeriod" min="2" max="1000" value="14" />
+                <input type="color" id="rsiColor" value="#4fc3f7" />
+            </div>
+            <div class="ind-row">
+                <label class="name" for="rsiOverbought" style="width:auto;">Over</label>
+                <input type="number" id="rsiOverbought" min="1" max="100" value="70" />
+                <label class="name" for="rsiOversold" style="width:auto;">Under</label>
+                <input type="number" id="rsiOversold" min="0" max="99" value="30" />
+            </div>
+        </div>
+        <div class="ind-divider"></div>
+        <div class="ind-group" id="ratioGroup">
+            <div style="font-size:13px;color:#aaa;margin-bottom:2px;">Taker Buy / Quote Volume Ratio</div>
+            <div class="ind-row">
+                <input type="checkbox" id="ratioOn" checked />
+                <label class="name" for="ratioColor">Ratio</label>
+                <input type="color" id="ratioColor" value="#26a69a" />
+            </div>
+            <div class="ind-row">
+                <input type="checkbox" id="ratioMaOn" checked />
+                <label class="name" for="ratioMaPeriod">MA</label>
+                <input type="number" id="ratioMaPeriod" min="1" max="1000" value="14" />
+                <input type="color" id="ratioMaColor" value="#f0c000" />
+            </div>
+        </div>
+        <div class="ind-divider"></div>
+        <button class="apply-btn" id="applyBtn">Apply</button>
+    </div>
+</div>
+
 <div id="chart"></div>
+<div id="rsi"></div>
+<div id="ratio"></div>
 <div id="balance"></div>
 <div class="meta" id="meta"></div>
 <div class="error" id="error"></div>
@@ -34,16 +109,120 @@
     const errorEl = document.getElementById('error');
     const metaEl = document.getElementById('meta');
     const chartHost = document.getElementById('chart');
+    const rsiHost = document.getElementById('rsi');
+    const ratioHost = document.getElementById('ratio');
     const balanceHost = document.getElementById('balance');
+    const applyBtn = document.getElementById('applyBtn');
     const fmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const localDateFmt = new Intl.DateTimeFormat(undefined, { year: '2-digit', month: '2-digit', day: '2-digit' });
     const localTimeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const localTimeNoSecFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
     let priceChart = null;
+    let rsiChart = null;
+    let ratioChart = null;
     let balanceChart = null;
+    let lastTimelineData = null;
 
     function toEpochSec(isoTime) {
         return Math.floor(new Date(isoTime).getTime() / 1000);
+    }
+
+    /** Exponential moving average over normalized bars (ascending). Returns [{time, value}] for bars at/after the seed period. */
+    function computeEma(barsAsc, period) {
+        const out = [];
+        if (!Array.isArray(barsAsc) || period < 1 || barsAsc.length < period) return out;
+        const k = 2 / (period + 1);
+        let seed = 0;
+        for (let i = 0; i < period; i++) seed += barsAsc[i].close;
+        let ema = seed / period;
+        out.push({ time: barsAsc[period - 1].time, value: ema });
+        for (let i = period; i < barsAsc.length; i++) {
+            ema = barsAsc[i].close * k + ema * (1 - k);
+            out.push({ time: barsAsc[i].time, value: ema });
+        }
+        return out;
+    }
+
+    /** Wilder's RSI over normalized bars (ascending). Returns [{time, value}] starting after the seed period. */
+    function computeRsi(barsAsc, period) {
+        const out = [];
+        if (!Array.isArray(barsAsc) || period < 1 || barsAsc.length <= period) return out;
+        let gain = 0;
+        let loss = 0;
+        for (let i = 1; i <= period; i++) {
+            const diff = barsAsc[i].close - barsAsc[i - 1].close;
+            if (diff >= 0) gain += diff; else loss -= diff;
+        }
+        let avgGain = gain / period;
+        let avgLoss = loss / period;
+        const rsiAt = () => avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+        out.push({ time: barsAsc[period].time, value: rsiAt() });
+        for (let i = period + 1; i < barsAsc.length; i++) {
+            const diff = barsAsc[i].close - barsAsc[i - 1].close;
+            const g = diff > 0 ? diff : 0;
+            const l = diff < 0 ? -diff : 0;
+            avgGain = (avgGain * (period - 1) + g) / period;
+            avgLoss = (avgLoss * (period - 1) + l) / period;
+            out.push({ time: barsAsc[i].time, value: rsiAt() });
+        }
+        return out;
+    }
+
+    function readEmaConfig() {
+        const rows = [];
+        for (const i of [1, 2, 3]) {
+            rows.push({
+                on: document.getElementById(`ema${i}On`).checked,
+                period: parseInt(document.getElementById(`ema${i}Period`).value, 10),
+                color: document.getElementById(`ema${i}Color`).value
+            });
+        }
+        return rows;
+    }
+
+    function readRsiConfig() {
+        return {
+            on: document.getElementById('rsiOn').checked,
+            period: parseInt(document.getElementById('rsiPeriod').value, 10),
+            color: document.getElementById('rsiColor').value,
+            overbought: parseFloat(document.getElementById('rsiOverbought').value),
+            oversold: parseFloat(document.getElementById('rsiOversold').value)
+        };
+    }
+
+    function readRatioConfig() {
+        return {
+            on: document.getElementById('ratioOn').checked,
+            color: document.getElementById('ratioColor').value,
+            maOn: document.getElementById('ratioMaOn').checked,
+            maPeriod: parseInt(document.getElementById('ratioMaPeriod').value, 10),
+            maColor: document.getElementById('ratioMaColor').value
+        };
+    }
+
+    /** Taker buy quote volume / quote asset volume per bar, expressed as a percentage (0..100). */
+    function computeTakerBuyRatio(barsAsc) {
+        const out = [];
+        for (const b of barsAsc) {
+            const quote = b.quoteAssetVolume || 0;
+            if (quote <= 0) continue;
+            const ratio = (b.takerBuyQuoteVolume || 0) / quote * 100;
+            out.push({ time: b.time, value: ratio });
+        }
+        return out;
+    }
+
+    /** Simple moving average over a [{time, value}] series. */
+    function smaOfSeries(series, period) {
+        const out = [];
+        if (period < 1 || series.length < period) return out;
+        let sum = 0;
+        for (let i = 0; i < series.length; i++) {
+            sum += series[i].value;
+            if (i >= period) sum -= series[i - period].value;
+            if (i >= period - 1) out.push({ time: series[i].time, value: sum / period });
+        }
+        return out;
     }
 
     function normalizeCandles(candles) {
@@ -53,13 +232,24 @@
             if (!Number.isFinite(t)) continue;
             const prev = bySec.get(t);
             if (!prev) {
-                bySec.set(t, { time: t, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume || 0 });
+                bySec.set(t, {
+                    time: t,
+                    open: c.open,
+                    high: c.high,
+                    low: c.low,
+                    close: c.close,
+                    volume: c.volume || 0,
+                    quoteAssetVolume: c.quoteAssetVolume || 0,
+                    takerBuyQuoteVolume: c.takerBuyQuoteVolume || 0
+                });
                 continue;
             }
             prev.high = Math.max(prev.high, c.high);
             prev.low = Math.min(prev.low, c.low);
             prev.close = c.close;
             prev.volume = (prev.volume || 0) + (c.volume || 0);
+            prev.quoteAssetVolume = (prev.quoteAssetVolume || 0) + (c.quoteAssetVolume || 0);
+            prev.takerBuyQuoteVolume = (prev.takerBuyQuoteVolume || 0) + (c.takerBuyQuoteVolume || 0);
         }
         return Array.from(bySec.values()).sort((a, b) => a.time - b.time);
     }
@@ -123,8 +313,12 @@
 
     function clearCharts() {
         chartHost.innerHTML = '';
+        rsiHost.innerHTML = '';
+        ratioHost.innerHTML = '';
         balanceHost.innerHTML = '';
         priceChart = null;
+        rsiChart = null;
+        ratioChart = null;
         balanceChart = null;
     }
 
@@ -190,6 +384,16 @@
         throw new Error('Unsupported Lightweight Charts version for candlestick series');
     }
 
+    function addHistogramSeriesCompat(chart, options) {
+        if (typeof chart.addHistogramSeries === 'function') {
+            return chart.addHistogramSeries(options || {});
+        }
+        if (typeof chart.addSeries === 'function' && LightweightCharts.HistogramSeries) {
+            return chart.addSeries(LightweightCharts.HistogramSeries, options || {});
+        }
+        throw new Error('Unsupported Lightweight Charts version for histogram series');
+    }
+
     function setMarkersCompat(series, markers) {
         if (typeof series.setMarkers === 'function') {
             series.setMarkers(markers);
@@ -202,8 +406,31 @@
         console.warn('Series markers are not supported in this Lightweight Charts build');
     }
 
+    /** Keep the visible time range of multiple charts in sync when panning/zooming any of them. */
+    function syncTimeScales(charts) {
+        const list = charts.filter(Boolean);
+        if (list.length < 2) return;
+        let syncing = false;
+        for (const source of list) {
+            source.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+                if (syncing || !range) return;
+                syncing = true;
+                try {
+                    for (const target of list) {
+                        if (target !== source) {
+                            target.timeScale().setVisibleLogicalRange(range);
+                        }
+                    }
+                } finally {
+                    syncing = false;
+                }
+            });
+        }
+    }
+
     function renderTimeline(data) {
         clearCharts();
+        lastTimelineData = data;
         priceChart = LightweightCharts.createChart(chartHost, buildChartOptions());
         const barData = normalizeCandles(data.candles);
         const candleData = barData.map(c => ({
@@ -225,10 +452,87 @@
         const markers = normalizeMarkers(data.events, barData);
         setMarkersCompat(priceSeries, markers);
 
+        // EMA overlays on the price chart.
+        for (const cfg of readEmaConfig()) {
+            if (!cfg.on || !Number.isFinite(cfg.period) || cfg.period < 1) continue;
+            const emaData = computeEma(barData, cfg.period);
+            if (!emaData.length) continue;
+            const emaSeries = addLineSeriesCompat(priceChart, {
+                color: cfg.color,
+                lineWidth: 2,
+                priceLineVisible: false,
+                lastValueVisible: false,
+                title: `EMA ${cfg.period}`
+            });
+            emaSeries.setData(emaData);
+        }
+
+        // RSI in its own pane.
+        const rsiCfg = readRsiConfig();
+        if (rsiCfg.on && Number.isFinite(rsiCfg.period) && rsiCfg.period >= 2) {
+            const rsiData = computeRsi(barData, rsiCfg.period);
+            if (rsiData.length) {
+                const rsiOptions = buildChartOptions();
+                rsiOptions.rightPriceScale = { borderColor: '#444', scaleMargins: { top: 0.1, bottom: 0.1 } };
+                rsiChart = LightweightCharts.createChart(rsiHost, rsiOptions);
+                const rsiSeries = addLineSeriesCompat(rsiChart, {
+                    color: rsiCfg.color,
+                    lineWidth: 2,
+                    title: `RSI ${rsiCfg.period}`
+                });
+                rsiSeries.setData(rsiData);
+                if (typeof rsiSeries.createPriceLine === 'function') {
+                    rsiSeries.createPriceLine({ price: rsiCfg.overbought, color: '#ef5350', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'OB' });
+                    rsiSeries.createPriceLine({ price: rsiCfg.oversold, color: '#4caf50', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'OS' });
+                }
+                rsiChart.timeScale().fitContent();
+            }
+        }
+
+        // Taker buy / quote volume ratio in its own pane (one bar per kline).
+        const ratioCfg = readRatioConfig();
+        if (ratioCfg.on) {
+            const ratioData = computeTakerBuyRatio(barData);
+            if (ratioData.length) {
+                const ratioOptions = buildChartOptions();
+                ratioOptions.rightPriceScale = { borderColor: '#444', scaleMargins: { top: 0.1, bottom: 0 } };
+                ratioChart = LightweightCharts.createChart(ratioHost, ratioOptions);
+                const ratioSeries = addHistogramSeriesCompat(ratioChart, {
+                    priceFormat: { type: 'custom', formatter: (v) => `${v.toFixed(1)}%` },
+                    title: 'Taker Buy %'
+                });
+                // Green when buyers dominate (>50%), red otherwise.
+                ratioSeries.setData(ratioData.map(d => ({
+                    time: d.time,
+                    value: d.value,
+                    color: d.value >= 50 ? ratioCfg.color : '#ef5350'
+                })));
+                if (typeof ratioSeries.createPriceLine === 'function') {
+                    ratioSeries.createPriceLine({ price: 50, color: '#888', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '50%' });
+                }
+                if (ratioCfg.maOn && Number.isFinite(ratioCfg.maPeriod) && ratioCfg.maPeriod >= 1) {
+                    const ratioMa = smaOfSeries(ratioData, ratioCfg.maPeriod);
+                    if (ratioMa.length) {
+                        const ratioMaSeries = addLineSeriesCompat(ratioChart, {
+                            color: ratioCfg.maColor,
+                            lineWidth: 2,
+                            priceLineVisible: false,
+                            lastValueVisible: false,
+                            title: `MA ${ratioCfg.maPeriod}`
+                        });
+                        ratioMaSeries.setData(ratioMa);
+                    }
+                }
+                ratioChart.timeScale().fitContent();
+            }
+        }
+
         balanceChart = LightweightCharts.createChart(balanceHost, buildChartOptions());
         const balanceSeries = addLineSeriesCompat(balanceChart, { color: '#4fc3f7', lineWidth: 2 });
         const balanceData = normalizeBalance(data.balance);
         balanceSeries.setData(balanceData);
+
+        syncTimeScales([priceChart, rsiChart, ratioChart, balanceChart]);
 
         const summary = data.summary;
         const firstEvent = data.events[0]?.time;
@@ -270,6 +574,38 @@
     }
 
     loadBtn.addEventListener('click', loadJobTimeline);
+    applyBtn.addEventListener('click', () => {
+        if (lastTimelineData) {
+            renderTimeline(lastTimelineData);
+        } else {
+            loadJobTimeline();
+        }
+    });
+    function applyConfigFromParams() {
+        const setNum = (id, key) => {
+            const v = params.get(key);
+            if (v !== null && v.trim() !== '') document.getElementById(id).value = v.trim();
+        };
+        const setOn = (id, key) => {
+            const v = params.get(key);
+            if (v !== null) document.getElementById(id).checked = v !== '0' && v.toLowerCase() !== 'false';
+        };
+        setNum('ema1Period', 'ema1');
+        setNum('ema2Period', 'ema2');
+        setNum('ema3Period', 'ema3');
+        setNum('rsiPeriod', 'rsi');
+        setNum('rsiOverbought', 'rsiOver');
+        setNum('rsiOversold', 'rsiUnder');
+        setNum('ratioMaPeriod', 'ratioMa');
+        setOn('ema1On', 'ema1On');
+        setOn('ema2On', 'ema2On');
+        setOn('ema3On', 'ema3On');
+        setOn('rsiOn', 'rsiOn');
+        setOn('ratioOn', 'ratioOn');
+        setOn('ratioMaOn', 'ratioMaOn');
+    }
+
+    applyConfigFromParams();
     jobIdInput.value = params.get('jobId') || '';
     if (jobIdInput.value) {
         loadJobTimeline();

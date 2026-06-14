@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.strategy")
 public class StrategyProperties {
+    private String type = "peak-trough";
     private String symbol;
     private String interval;
     private int n;
@@ -13,6 +14,23 @@ public class StrategyProperties {
     private double similarityThreshold;
     private long triggerMs;
     private long minSignalIntervalMs;
+    private VortexScalping vortex = new VortexScalping();
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public VortexScalping getVortex() {
+        return vortex;
+    }
+
+    public void setVortex(VortexScalping vortex) {
+        this.vortex = vortex;
+    }
 
     public String getSymbol() {
         return symbol;
@@ -84,5 +102,71 @@ public class StrategyProperties {
 
     public void setMinSignalIntervalMs(long minSignalIntervalMs) {
         this.minSignalIntervalMs = minSignalIntervalMs;
+    }
+
+    public static class VortexScalping {
+        private int emaPeriod = 20;
+        private int rsiPeriod = 14;
+        private double rsiOversold = 40.0;
+        private double rsiOverbought = 60.0;
+        private int volumeLookback = 5;
+        private double takerBuyVolumeMultiplier = 1.5;
+        private double takerBuyRatioDropFactor = 0.7;
+
+        public int getEmaPeriod() {
+            return emaPeriod;
+        }
+
+        public void setEmaPeriod(int emaPeriod) {
+            this.emaPeriod = emaPeriod;
+        }
+
+        public int getRsiPeriod() {
+            return rsiPeriod;
+        }
+
+        public void setRsiPeriod(int rsiPeriod) {
+            this.rsiPeriod = rsiPeriod;
+        }
+
+        public double getRsiOversold() {
+            return rsiOversold;
+        }
+
+        public void setRsiOversold(double rsiOversold) {
+            this.rsiOversold = rsiOversold;
+        }
+
+        public double getRsiOverbought() {
+            return rsiOverbought;
+        }
+
+        public void setRsiOverbought(double rsiOverbought) {
+            this.rsiOverbought = rsiOverbought;
+        }
+
+        public int getVolumeLookback() {
+            return volumeLookback;
+        }
+
+        public void setVolumeLookback(int volumeLookback) {
+            this.volumeLookback = volumeLookback;
+        }
+
+        public double getTakerBuyVolumeMultiplier() {
+            return takerBuyVolumeMultiplier;
+        }
+
+        public void setTakerBuyVolumeMultiplier(double takerBuyVolumeMultiplier) {
+            this.takerBuyVolumeMultiplier = takerBuyVolumeMultiplier;
+        }
+
+        public double getTakerBuyRatioDropFactor() {
+            return takerBuyRatioDropFactor;
+        }
+
+        public void setTakerBuyRatioDropFactor(double takerBuyRatioDropFactor) {
+            this.takerBuyRatioDropFactor = takerBuyRatioDropFactor;
+        }
     }
 }

@@ -38,8 +38,9 @@ app:
       strategy-signal: ${TOPIC_STRATEGY_SIGNAL:BTCUSDT.strategy.signal}
       simulate-replay: ${TOPIC_SIMULATE_REPLAY:BTCUSDT.simulate.replay}
   strategy:
+    type: ${STRATEGY_TYPE:vortex-scalping}
     symbol: ${SYMBOL:BTCUSDT}
-    interval: ${KLINE_INTERVAL:15m}
+    interval: ${KLINE_INTERVAL:1m}
     n: ${STRATEGY_N:500}
     k: ${STRATEGY_K:2}
     taker-fee: ${TAKER_FEE:0.0005}
@@ -47,6 +48,14 @@ app:
     similarity-threshold: ${SIMILARITY_THRESHOLD:0.001}
     trigger-ms: ${STRATEGY_TRIGGER_MS:2000}
     min-signal-interval-ms: ${MIN_SIGNAL_INTERVAL_MS:10000}
+    vortex:
+      ema-period: ${VORTEX_EMA_PERIOD:20}
+      rsi-period: ${VORTEX_RSI_PERIOD:14}
+      rsi-oversold: ${VORTEX_RSI_OVERSOLD:40}
+      rsi-overbought: ${VORTEX_RSI_OVERBOUGHT:60}
+      volume-lookback: ${VORTEX_VOLUME_LOOKBACK:5}
+      taker-buy-volume-multiplier: ${VORTEX_TAKER_BUY_MULT:1.5}
+      taker-buy-ratio-drop-factor: ${VORTEX_BUY_RATIO_DROP:0.7}
   market-data:
     base-rest-url: ${BINANCE_REST_BASE_URL:https://fapi.binance.com}
     ws-base-url: ${BINANCE_WS_BASE_URL:wss://fstream.binance.com}
@@ -57,5 +66,8 @@ app:
     standalone-exit: ${BACKTEST_STANDALONE_EXIT:true}
     cli-on-startup: ${BACKTEST_CLI_ON_STARTUP:false}
     ohlc-order: ${BACKTEST_OHLC_ORDER:OHLC}
+    snapshot-poll-max-attempts: ${BACKTEST_SNAPSHOT_POLL_MAX_ATTEMPTS:50}
+    snapshot-poll-delay-ms: ${BACKTEST_SNAPSHOT_POLL_DELAY_MS:200}
   simulate:
     base-url: ${SIMULATE_BASE_URL:http://simulate-service:8083}
+    initial-balance-usdt: ${SIM_INITIAL_BALANCE_USDT:500}

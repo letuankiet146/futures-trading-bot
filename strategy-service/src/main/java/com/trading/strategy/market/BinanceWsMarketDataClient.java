@@ -103,6 +103,12 @@ public class BinanceWsMarketDataClient {
                     candle.setLow(k.path("l").asDouble());
                     candle.setClose(k.path("c").asDouble());
                     candle.setClosed(k.path("x").asBoolean(false));
+                    if (k.has("q")) {
+                        candle.setQuoteAssetVolume(k.path("q").asDouble());
+                    }
+                    if (k.has("Q")) {
+                        candle.setTakerQuoteAssetVolume(k.path("Q").asDouble());
+                    }
                     marketStateStore.upsertFromWs(candle, strategyProperties.getN());
                 }
             } catch (Exception e) {

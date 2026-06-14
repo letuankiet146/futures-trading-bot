@@ -51,11 +51,13 @@ app:
     fee-gate-multiplier: ${FEE_GATE_MULTIPLIER:4.0}
     tp-multiplier: ${SIM_TP_MULTIPLIER:1.0}
     sl-multiplier: ${SIM_SL_MULTIPLIER:1.0}
+    take-profit-percent: ${SIM_TP_PERCENT:0.005}
+    stop-loss-percent: ${SIM_SL_PERCENT:0.003}
     initial-balance-usdt: ${SIM_INITIAL_BALANCE_USDT:500}
     sizing:
       mode: ${SIZING_MODE:PERCENT}
-      account-percent: ${SIZING_ACCOUNT_PERCENT:0.01}
-      max-account-percent: ${SIZING_MAX_ACCOUNT_PERCENT:0.02}
+      account-percent: ${SIZING_ACCOUNT_PERCENT:0.10}
+      max-account-percent: ${SIZING_MAX_ACCOUNT_PERCENT:0.10}
       fixed-notional-usdt: ${SIZING_FIXED_NOTIONAL_USDT:20}
     liquidation:
       isolated-margin-loss-threshold: ${SIM_LIQUIDATION_MARGIN_LOSS_THRESHOLD:0.8}

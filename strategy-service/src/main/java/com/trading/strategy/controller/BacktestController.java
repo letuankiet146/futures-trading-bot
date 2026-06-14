@@ -159,7 +159,7 @@ public class BacktestController {
         public record Result(int candlesReplayed, SimulateResult simulate) {}
 
         public record SimulateResult(
-                double balanceUsdt,
+                Double balanceUsdt,
                 Double lastMarkPrice,
                 Boolean frozen,
                 Integer totalTrades,

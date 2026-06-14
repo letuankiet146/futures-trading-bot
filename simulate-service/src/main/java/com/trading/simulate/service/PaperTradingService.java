@@ -117,9 +117,8 @@ public class PaperTradingService {
         double margin = notional / Math.max(1, properties.getLeverage());
         double feeOpen = notional * properties.getTakerFee();
 
-        double distanceRate = properties.getFeeGateMultiplier() * properties.getTakerFee();
-        double tpDistanceRate = distanceRate * properties.getTpMultiplier();
-        double slDistanceRate = distanceRate * properties.getSlMultiplier();
+        double tpDistanceRate = resolveTpDistanceRate();
+        double slDistanceRate = resolveSlDistanceRate();
         double tp;
         double sl;
         if ("BUY".equalsIgnoreCase(side)) {
@@ -249,6 +248,22 @@ public class PaperTradingService {
         }
         double pct = Math.min(s.getAccountPercent(), s.getMaxAccountPercent());
         return balance * pct;
+    }
+
+    private double resolveTpDistanceRate() {
+        if (properties.getTakeProfitPercent() > 0) {
+            return properties.getTakeProfitPercent();
+        }
+        double distanceRate = properties.getFeeGateMultiplier() * properties.getTakerFee();
+        return distanceRate * properties.getTpMultiplier();
+    }
+
+    private double resolveSlDistanceRate() {
+        if (properties.getStopLossPercent() > 0) {
+            return properties.getStopLossPercent();
+        }
+        double distanceRate = properties.getFeeGateMultiplier() * properties.getTakerFee();
+        return distanceRate * properties.getSlMultiplier();
     }
 
     private void resetInternal() {

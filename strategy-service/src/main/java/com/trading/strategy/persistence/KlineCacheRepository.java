@@ -17,6 +17,8 @@ public class KlineCacheRepository {
         c.setHigh(rs.getDouble("high_price"));
         c.setLow(rs.getDouble("low_price"));
         c.setClose(rs.getDouble("close_price"));
+        c.setQuoteAssetVolume(rs.getDouble("quote_asset_volume"));
+        c.setTakerQuoteAssetVolume(rs.getDouble("taker_quote_asset_volume"));
         c.setClosed(true);
         return c;
     };
@@ -61,7 +63,8 @@ public class KlineCacheRepository {
     public List<Candle> findCandlesInRange(String symbol, String klineInterval, long startOpenMs, long endOpenMs) {
         return jdbc.query(
                 """
-                SELECT open_time_ms, close_time_ms, open_price, high_price, low_price, close_price
+                SELECT open_time_ms, close_time_ms, open_price, high_price, low_price, close_price,
+                       quote_asset_volume, taker_quote_asset_volume
                 FROM strategy.backtest_kline
                 WHERE symbol = ? AND kline_interval = ?
                   AND open_time_ms >= ? AND open_time_ms <= ?
@@ -79,8 +82,9 @@ public class KlineCacheRepository {
         jdbc.batchUpdate(
                 """
                 INSERT INTO strategy.backtest_kline
-                  (symbol, kline_interval, open_time_ms, open_price, high_price, low_price, close_price, close_time_ms)
-                VALUES (?,?,?,?,?,?,?,?)
+                  (symbol, kline_interval, open_time_ms, open_price, high_price, low_price, close_price,
+                   close_time_ms, quote_asset_volume, taker_quote_asset_volume)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT (symbol, kline_interval, open_time_ms) DO NOTHING
                 """,
                 candles,
@@ -94,6 +98,8 @@ public class KlineCacheRepository {
                     ps.setDouble(6, c.getLow());
                     ps.setDouble(7, c.getClose());
                     ps.setLong(8, c.getCloseTime());
+                    ps.setDouble(9, c.getQuoteAssetVolume());
+                    ps.setDouble(10, c.getTakerQuoteAssetVolume());
                 });
     }
 }

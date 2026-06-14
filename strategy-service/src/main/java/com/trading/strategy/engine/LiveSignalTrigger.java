@@ -66,7 +66,7 @@ public class LiveSignalTrigger {
         var oldest = candles.get(0);
         var newest = candles.get(candles.size() - 1);
         log.info(
-                "Signal emitted side={} windowBars={} oldestOpen={} newestOpen={} signalPrice(close)={} mark={} avgTop={} avgBottom={}",
+                "Signal emitted side={} windowBars={} oldestOpen={} newestOpen={} signalPrice(close)={} mark={} metricA={} metricB={}",
                 decision.side(),
                 candles.size(),
                 Instant.ofEpochMilli(oldest.getOpenTime()),

@@ -14,9 +14,45 @@ public class SimulateBacktestSnapshotClient {
     private static final Logger log = LoggerFactory.getLogger(SimulateBacktestSnapshotClient.class);
 
     private final RestClient restClient;
+    private final double initialBalanceUsdt;
+    private final int snapshotPollMaxAttempts;
+    private final long snapshotPollDelayMs;
 
-    public SimulateBacktestSnapshotClient(@Value("${app.simulate.base-url:http://simulate-service:8083}") String baseUrl) {
+    public SimulateBacktestSnapshotClient(
+            @Value("${app.simulate.base-url:http://simulate-service:8083}") String baseUrl,
+            @Value("${app.simulate.initial-balance-usdt:500}") double initialBalanceUsdt,
+            @Value("${app.backtest.snapshot-poll-max-attempts:50}") int snapshotPollMaxAttempts,
+            @Value("${app.backtest.snapshot-poll-delay-ms:200}") long snapshotPollDelayMs) {
         this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+        this.initialBalanceUsdt = initialBalanceUsdt;
+        this.snapshotPollMaxAttempts = Math.max(1, snapshotPollMaxAttempts);
+        this.snapshotPollDelayMs = Math.max(50L, snapshotPollDelayMs);
+    }
+
+    /**
+     * Poll simulate-service until replay Kafka messages are reflected in the job timeline, then persistable snapshot.
+     */
+    public SimulateBacktestSnapshot fetchSnapshotAfterReplay(String jobId, int expectedSignals) {
+        SimulateBacktestSnapshot last = null;
+        for (int attempt = 1; attempt <= snapshotPollMaxAttempts; attempt++) {
+            last = fetchSnapshotOrNull(jobId);
+            if (last == null) {
+                sleep(snapshotPollDelayMs);
+                continue;
+            }
+            if (expectedSignals == 0 || last.balanceUsdt() != null) {
+                return last;
+            }
+            sleep(snapshotPollDelayMs);
+        }
+        if (last != null && last.balanceUsdt() == null && expectedSignals > 0) {
+            log.warn(
+                    "Backtest simulate snapshot for jobId={} missing balance after {} polls (expectedSignals={})",
+                    jobId,
+                    snapshotPollMaxAttempts,
+                    expectedSignals);
+        }
+        return last;
     }
 
     public SimulateBacktestSnapshot fetchSnapshotOrNull(String jobId) {
@@ -29,10 +65,7 @@ public class SimulateBacktestSnapshotClient {
             if (timeline == null || timeline.summary == null) {
                 return null;
             }
-            Double finalBalance = null;
-            if (timeline.balance != null && !timeline.balance.isEmpty()) {
-                finalBalance = timeline.balance.get(timeline.balance.size() - 1).balanceUsdt;
-            }
+            Double finalBalance = resolveFinalBalance(timeline);
             return new SimulateBacktestSnapshot(
                     finalBalance,
                     null,
@@ -47,6 +80,24 @@ public class SimulateBacktestSnapshotClient {
         } catch (Exception e) {
             log.warn("Backtest simulate snapshot unavailable for jobId={}: {}", jobId, e.getMessage());
             return null;
+        }
+    }
+
+    private Double resolveFinalBalance(JobTimelineDto timeline) {
+        if (timeline.balance != null && !timeline.balance.isEmpty()) {
+            return timeline.balance.get(timeline.balance.size() - 1).balanceUsdt;
+        }
+        if (timeline.summary != null && timeline.summary.totalTrades == 0) {
+            return initialBalanceUsdt;
+        }
+        return null;
+    }
+
+    private void sleep(long delayMs) {
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

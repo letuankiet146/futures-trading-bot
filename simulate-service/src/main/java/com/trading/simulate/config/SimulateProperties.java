@@ -10,6 +10,8 @@ public class SimulateProperties {
     private double feeGateMultiplier;
     private double tpMultiplier;
     private double slMultiplier;
+    private double takeProfitPercent;
+    private double stopLossPercent;
     private double initialBalanceUsdt;
     private Sizing sizing = new Sizing();
     private Liquidation liquidation = new Liquidation();
@@ -62,6 +64,22 @@ public class SimulateProperties {
 
     public void setSlMultiplier(double slMultiplier) {
         this.slMultiplier = slMultiplier;
+    }
+
+    public double getTakeProfitPercent() {
+        return takeProfitPercent;
+    }
+
+    public void setTakeProfitPercent(double takeProfitPercent) {
+        this.takeProfitPercent = takeProfitPercent;
+    }
+
+    public double getStopLossPercent() {
+        return stopLossPercent;
+    }
+
+    public void setStopLossPercent(double stopLossPercent) {
+        this.stopLossPercent = stopLossPercent;
     }
 
     public double getInitialBalanceUsdt() {

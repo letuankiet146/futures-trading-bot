@@ -15,4 +15,4 @@ FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=builder /workspace/execute-service/target/execute-service-0.0.1-SNAPSHOT.jar app.jar
 EXPOSE 8082
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

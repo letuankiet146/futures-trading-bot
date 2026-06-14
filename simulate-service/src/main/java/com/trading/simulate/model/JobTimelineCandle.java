@@ -8,5 +8,7 @@ public record JobTimelineCandle(
         double high,
         double low,
         double close,
-        double volume) {
+        double volume,
+        double quoteAssetVolume,
+        double takerBuyQuoteVolume) {
 }

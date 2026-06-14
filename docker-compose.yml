@@ -29,6 +29,8 @@ services:
       POSTGRES_PASSWORD: trading
     ports:
       - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U trading -d trading" ]
       interval: 10s
@@ -41,6 +43,7 @@ services:
       dockerfile: strategy-service/Dockerfile
     container_name: strategy-service
     environment:
+      JAVA_OPTS: ${STRATEGY_JAVA_OPTS:--agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005}
       SERVER_PORT: ${STRATEGY_PORT:-8081}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       TOPIC_STRATEGY_SIGNAL: ${TOPIC_STRATEGY_SIGNAL:-BTCUSDT.strategy.signal}
@@ -68,6 +71,7 @@ services:
       STRATEGY_DB_PASSWORD: ${STRATEGY_DB_PASSWORD:-trading}
     ports:
       - "${STRATEGY_PORT:-8081}:8081"
+      - "${STRATEGY_DEBUG_PORT:-5005}:5005"
     depends_on:
       kafka:
         condition: service_healthy
@@ -80,6 +84,7 @@ services:
       dockerfile: execute-service/Dockerfile
     container_name: execute-service
     environment:
+      JAVA_OPTS: ${EXECUTE_JAVA_OPTS:--agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005}
       SERVER_PORT: ${EXECUTE_PORT:-8082}
       TRADING_MODE: ${TRADING_MODE:-SIMULATE}
       BACKTEST_ENABLED: ${BACKTEST_ENABLED:-false}
@@ -109,6 +114,7 @@ services:
       EXECUTE_DB_PASSWORD: ${EXECUTE_DB_PASSWORD:-trading}
     ports:
       - "${EXECUTE_PORT:-8082}:8082"
+      - "${EXECUTE_DEBUG_PORT:-5006}:5005"
     depends_on:
       kafka:
         condition: service_healthy
@@ -121,6 +127,7 @@ services:
       dockerfile: simulate-service/Dockerfile
     container_name: simulate-service
     environment:
+      JAVA_OPTS: ${SIMULATE_JAVA_OPTS:--agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005}
       SERVER_PORT: ${SIMULATE_PORT:-8083}
       TRADING_MODE: ${TRADING_MODE:-SIMULATE}
       BACKTEST_ENABLED: ${BACKTEST_ENABLED:-false}
@@ -149,8 +156,12 @@ services:
       SIMULATE_DB_PASSWORD: ${SIMULATE_DB_PASSWORD:-trading}
     ports:
       - "${SIMULATE_PORT:-8083}:8083"
+      - "${SIMULATE_DEBUG_PORT:-5007}:5005"
     depends_on:
       kafka:
         condition: service_healthy
       postgres:
         condition: service_healthy
+
+volumes:
+  postgres-data:
