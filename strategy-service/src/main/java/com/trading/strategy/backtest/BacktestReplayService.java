@@ -46,6 +46,10 @@ public class BacktestReplayService {
         }
         int windowN = strategyProperties.getN();
         int emitted = 0;
+        // Strategy is evaluated once per closed candle. A raised signal is deferred and executed on the
+        // next candle's open, so the backtest never trades on a candle whose close it could not have seen yet.
+        boolean pendingSignal = false;
+        String pendingSide = null;
         for (int candleIdx = 0; candleIdx < candles.size(); candleIdx++) {
             Candle candle = candles.get(candleIdx);
             int windowStart = Math.max(0, candleIdx - windowN + 1);
@@ -54,23 +58,40 @@ public class BacktestReplayService {
                 continue;
             }
             List<Double> path = toPricePath(candle);
+
+            // Execute a signal raised at the previous candle's close, filling at this candle's open.
+            if (pendingSignal) {
+                String openTimestamp = toReplayTimestamp(candle, 0, path.size());
+                simulateFeedPublisher.publishSignal(
+                        strategyProperties.getSymbol(),
+                        pendingSide,
+                        candle.getOpen(),
+                        replayCorrelationId,
+                        openTimestamp);
+                simulateFeedPublisher.flush();
+                emitted++;
+                pendingSignal = false;
+                pendingSide = null;
+            }
+
+            // Stream marks (O/H/L/C) so TP/SL/liquidation can be tracked intra-candle.
             for (int i = 0; i < path.size(); i++) {
                 double mark = path.get(i);
                 String eventTimestamp = toReplayTimestamp(candle, i, path.size());
-                StrategyDecision decision = evaluator.evaluate(history, mark);
                 simulateFeedPublisher.publishMark(
                         strategyProperties.getSymbol(), mark, replayCorrelationId, eventTimestamp);
-                if (decision.shouldSignal()) {
-                    simulateFeedPublisher.publishSignal(
-                            strategyProperties.getSymbol(),
-                            decision.side(),
-                            decision.signalPrice(),
-                            replayCorrelationId,
-                            eventTimestamp);
-                    emitted++;
-                }
                 simulateFeedPublisher.flush();
             }
+
+            // Evaluate once at the candle close; any signal is deferred to the next candle.
+            StrategyDecision decision = evaluator.evaluate(history, candle.getClose());
+            if (decision.shouldSignal()) {
+                pendingSignal = true;
+                pendingSide = decision.side();
+            }
+        }
+        if (pendingSignal) {
+            log.info("Replay ended with a pending {} signal but no next candle to execute it on", pendingSide);
         }
         log.info(
                 "Backtest replay completed candles={} emittedSignals={} symbol={} interval={}",
