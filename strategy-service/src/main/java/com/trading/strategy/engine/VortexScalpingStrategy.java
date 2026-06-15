@@ -59,12 +59,12 @@ public class VortexScalpingStrategy implements TradingStrategy {
         double takerSellVol = quoteVol - currentTakerBuy;
 
         boolean longEntry = price > ema
-                && rsi < cfg.getRsiOversold()
+                && rsi <= cfg.getRsiOversold()
 //                && currentTakerBuy > cfg.getTakerBuyVolumeMultiplier() * avgTakerBuy
                 ;
 
         boolean shortEntry = price < ema
-                && rsi > cfg.getRsiOverbought()
+                && rsi >= cfg.getRsiOverbought()
 //                && takerSellVol > currentTakerBuy
 //                && currentBuyRatio < avgBuyRatio * cfg.getTakerBuyRatioDropFactor()
                 ;

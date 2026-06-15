@@ -25,6 +25,22 @@
         .ind-row input[type="color"] { width: 28px; height: 24px; padding: 0; border: 1px solid #444; background: #222; border-radius: 4px; cursor: pointer; }
         .ind-divider { width: 1px; align-self: stretch; background: #333; }
         .apply-btn { padding: 6px 14px; cursor: pointer; background: #f0c000; color: #111; border: none; border-radius: 4px; font-weight: bold; align-self: center; }
+        #trades { margin-top: 16px; }
+        #trades h3 { margin: 0 0 8px; font-size: 14px; color: #f0c000; }
+        .trade-wrap { max-height: 300px; overflow: auto; border: 1px solid #333; border-radius: 6px; }
+        #trades table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        #trades th, #trades td { padding: 5px 8px; border-bottom: 1px solid #2a2a2a; text-align: left; white-space: nowrap; }
+        #trades th { color: #f0c000; position: sticky; top: 0; background: #1a1a1a; z-index: 1; }
+        #trades tbody tr { cursor: pointer; }
+        #trades tbody tr:hover { background: #222; }
+        #trades tbody tr.selected { background: #2d2d12; }
+        .pnl-pos { color: #26a69a; }
+        .pnl-neg { color: #ef5350; }
+        .result-TP { color: #26a69a; }
+        .result-SL { color: #ef5350; }
+        .result-LIQUIDATED { color: #ff9800; }
+        .result-REVERSE { color: #ffd54f; }
+        .result-OPEN { color: #888; }
     </style>
 </head>
 <body>
@@ -101,6 +117,28 @@
 <div class="meta" id="meta"></div>
 <div class="error" id="error"></div>
 
+<div id="trades">
+    <h3>Trades (<span id="tradesCount">0</span>)</h3>
+    <div class="trade-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Side</th>
+                    <th>Entry time</th>
+                    <th>Exit time</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>Qty</th>
+                    <th>PnL</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody id="tradesBody"></tbody>
+        </table>
+    </div>
+</div>
+
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 <script>
     const params = new URLSearchParams(window.location.search);
@@ -113,6 +151,8 @@
     const ratioHost = document.getElementById('ratio');
     const balanceHost = document.getElementById('balance');
     const applyBtn = document.getElementById('applyBtn');
+    const tradesBody = document.getElementById('tradesBody');
+    const tradesCount = document.getElementById('tradesCount');
     const fmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const localDateFmt = new Intl.DateTimeFormat(undefined, { year: '2-digit', month: '2-digit', day: '2-digit' });
     const localTimeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -225,6 +265,36 @@
         return out;
     }
 
+    /**
+     * Project an indicator series onto the full candle time axis. Bars without a value get whitespace points so every
+     * pane shares an identical time scale — this keeps logical-range sync stable (otherwise zoom snaps back).
+     */
+    function placeOnBars(barsAsc, pointsAsc, decorate) {
+        const map = new Map(pointsAsc.map(p => [p.time, p]));
+        return barsAsc.map(b => {
+            const p = map.get(b.time);
+            if (!p) return { time: b.time };
+            const item = { time: b.time, value: p.value };
+            if (decorate) decorate(item, p);
+            return item;
+        });
+    }
+
+    /** Forward-fill a sparse [{time, value}] series across the full candle time axis (e.g. equity curve). */
+    function forwardFillToBars(barsAsc, pointsAsc) {
+        const out = [];
+        let i = 0;
+        let last;
+        for (const b of barsAsc) {
+            while (i < pointsAsc.length && pointsAsc[i].time <= b.time) {
+                last = pointsAsc[i].value;
+                i++;
+            }
+            out.push(last === undefined ? { time: b.time } : { time: b.time, value: last });
+        }
+        return out;
+    }
+
     function normalizeCandles(candles) {
         const bySec = new Map();
         for (const c of candles) {
@@ -320,6 +390,8 @@
         rsiChart = null;
         ratioChart = null;
         balanceChart = null;
+        if (tradesBody) tradesBody.innerHTML = '';
+        if (tradesCount) tradesCount.textContent = '0';
     }
 
     function toLocalDateFromChartTime(time) {
@@ -480,7 +552,7 @@
                     lineWidth: 2,
                     title: `RSI ${rsiCfg.period}`
                 });
-                rsiSeries.setData(rsiData);
+                rsiSeries.setData(placeOnBars(barData, rsiData));
                 if (typeof rsiSeries.createPriceLine === 'function') {
                     rsiSeries.createPriceLine({ price: rsiCfg.overbought, color: '#ef5350', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'OB' });
                     rsiSeries.createPriceLine({ price: rsiCfg.oversold, color: '#4caf50', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'OS' });
@@ -502,11 +574,9 @@
                     title: 'Taker Buy %'
                 });
                 // Green when buyers dominate (>50%), red otherwise.
-                ratioSeries.setData(ratioData.map(d => ({
-                    time: d.time,
-                    value: d.value,
-                    color: d.value >= 50 ? ratioCfg.color : '#ef5350'
-                })));
+                ratioSeries.setData(placeOnBars(barData, ratioData, (item) => {
+                    item.color = item.value >= 50 ? ratioCfg.color : '#ef5350';
+                }));
                 if (typeof ratioSeries.createPriceLine === 'function') {
                     ratioSeries.createPriceLine({ price: 50, color: '#888', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '50%' });
                 }
@@ -520,7 +590,7 @@
                             lastValueVisible: false,
                             title: `MA ${ratioCfg.maPeriod}`
                         });
-                        ratioMaSeries.setData(ratioMa);
+                        ratioMaSeries.setData(placeOnBars(barData, ratioMa));
                     }
                 }
                 ratioChart.timeScale().fitContent();
@@ -530,9 +600,14 @@
         balanceChart = LightweightCharts.createChart(balanceHost, buildChartOptions());
         const balanceSeries = addLineSeriesCompat(balanceChart, { color: '#4fc3f7', lineWidth: 2 });
         const balanceData = normalizeBalance(data.balance);
-        balanceSeries.setData(balanceData);
+        // Align equity curve to the candle axis so all panes share one time scale (stable zoom sync).
+        balanceSeries.setData(barData.length ? forwardFillToBars(barData, balanceData) : balanceData);
 
         syncTimeScales([priceChart, rsiChart, ratioChart, balanceChart]);
+        // Single source of truth for the initial view; propagates to synced panes.
+        priceChart.timeScale().fitContent();
+
+        renderTrades(data.events);
 
         const summary = data.summary;
         const firstEvent = data.events[0]?.time;
@@ -548,6 +623,90 @@
             firstEvent ? `start(local)=${fmt.format(new Date(firstEvent))}` : null,
             lastEvent ? `end(local)=${fmt.format(new Date(lastEvent))}` : null
         ].filter(Boolean).join(' | ');
+    }
+
+    /** Pair ENTRY events with their following exit (TP/SL/REVERSE/LIQUIDATED) into round-trip trades. */
+    function buildTrades(events) {
+        const sorted = [...(events || [])].sort((a, b) => new Date(a.time) - new Date(b.time));
+        const trades = [];
+        let open = null;
+        for (const e of sorted) {
+            if (e.type === 'ENTRY') {
+                if (open) trades.push(open);
+                open = {
+                    side: e.side,
+                    entryTime: e.time,
+                    entryPrice: e.price,
+                    qty: e.quantity,
+                    exitTime: null,
+                    exitPrice: null,
+                    result: 'OPEN'
+                };
+            } else if (open) {
+                open.exitTime = e.time;
+                open.exitPrice = e.price;
+                open.result = e.type;
+                trades.push(open);
+                open = null;
+            }
+        }
+        if (open) trades.push(open);
+        return trades;
+    }
+
+    function tradePnl(t) {
+        if (t.exitPrice == null) return null;
+        const dir = (t.side || '').toUpperCase() === 'BUY' ? 1 : -1;
+        return (t.exitPrice - t.entryPrice) * dir * (t.qty || 0);
+    }
+
+    /** Move all (synced) charts to focus on the given trade's time window. */
+    function focusChartOnRange(entryIso, exitIso) {
+        if (!priceChart) return;
+        const from = toEpochSec(entryIso);
+        const to = Number.isFinite(toEpochSec(exitIso)) && exitIso ? toEpochSec(exitIso) : from;
+        const span = Math.max(to - from, 1);
+        const pad = Math.max(60, Math.round(span * 0.6));
+        try {
+            priceChart.timeScale().setVisibleRange({ from: from - pad, to: to + pad });
+        } catch (err) {
+            console.warn('Unable to focus chart range', err);
+        }
+    }
+
+    function renderTrades(events) {
+        const trades = buildTrades(events);
+        tradesCount.textContent = String(trades.length);
+        tradesBody.innerHTML = '';
+        trades.forEach((t, idx) => {
+            const tr = document.createElement('tr');
+            const pnl = tradePnl(t);
+            const pnlClass = pnl == null ? '' : (pnl >= 0 ? 'pnl-pos' : 'pnl-neg');
+            const cells = [
+                String(idx + 1),
+                (t.side || '').toUpperCase(),
+                t.entryTime ? fmt.format(new Date(t.entryTime)) : '',
+                t.exitTime ? fmt.format(new Date(t.exitTime)) : '—',
+                Number.isFinite(t.entryPrice) ? t.entryPrice.toFixed(2) : '',
+                Number.isFinite(t.exitPrice) ? t.exitPrice.toFixed(2) : '—',
+                Number.isFinite(t.qty) ? t.qty.toFixed(4) : '',
+                pnl == null ? '—' : pnl.toFixed(4),
+                t.result
+            ];
+            cells.forEach((text, i) => {
+                const td = document.createElement('td');
+                td.textContent = text;
+                if (i === 7 && pnlClass) td.className = pnlClass;
+                if (i === 8) td.className = `result-${t.result}`;
+                tr.appendChild(td);
+            });
+            tr.addEventListener('click', () => {
+                for (const el of tradesBody.querySelectorAll('tr.selected')) el.classList.remove('selected');
+                tr.classList.add('selected');
+                focusChartOnRange(t.entryTime, t.exitTime);
+            });
+            tradesBody.appendChild(tr);
+        });
     }
 
     async function loadJobTimeline() {
