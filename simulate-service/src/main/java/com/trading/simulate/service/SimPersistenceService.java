@@ -159,18 +159,58 @@ public class SimPersistenceService {
         List<JobTimelineBalance> balance = jobBalanceSnapshotRepository.findByJobIdOrderByEventTimeAsc(jobId).stream()
                 .map(b -> new JobTimelineBalance(b.getEventTime(), b.getBalanceUsdt()))
                 .toList();
-        int wins = (int) events.stream().filter(e -> "TP".equals(e.type())).count();
-        int losses = (int) events.stream().filter(e -> "SL".equals(e.type())).count();
-        int liquidations = (int) events.stream().filter(e -> "LIQUIDATED".equals(e.type())).count();
-        int totalTrades = wins + losses + liquidations;
         double takerFeeRate = simulateProperties.getTakerFee();
+        int wins = 0;
+        int losses = 0;
+        int liquidations = 0;
+        // Pair each ENTRY with its following exit so reverse-on-signal closes are also counted. A REVERSE
+        // close is classified by net PnL (after open+close fees), matching the in-memory PaperStats accounting.
+        JobTimelineEvent openEntry = null;
+        for (JobTimelineEvent e : events) {
+            String type = e.type();
+            if ("ENTRY".equals(type)) {
+                openEntry = e;
+                continue;
+            }
+            switch (type) {
+                case "TP" -> wins++;
+                case "SL" -> losses++;
+                case "LIQUIDATED" -> liquidations++;
+                case "REVERSE" -> {
+                    if (isReverseWin(openEntry, e, takerFeeRate)) {
+                        wins++;
+                    } else {
+                        losses++;
+                    }
+                }
+                default -> {
+                    continue;
+                }
+            }
+            openEntry = null;
+        }
+        int totalTrades = wins + losses + liquidations;
+        // Liquidations charge no close fee (see PaperTradingService#liquidate), so they are excluded here.
         double totalFees = events.stream()
-                .filter(e -> "ENTRY".equals(e.type()) || "TP".equals(e.type()) || "SL".equals(e.type()))
+                .filter(e -> "ENTRY".equals(e.type())
+                        || "TP".equals(e.type())
+                        || "SL".equals(e.type())
+                        || "REVERSE".equals(e.type()))
                 .mapToDouble(e -> e.price() * e.quantity() * takerFeeRate)
                 .sum();
         double totalPnl = 0.0;
         if (balance.size() >= 2) {
             totalPnl = balance.get(balance.size() - 1).balanceUsdt() - balance.get(0).balanceUsdt();
+        }
+        // A position still open at the end has no realized balance change yet; mark it to market using the
+        // last candle close so its unrealized PnL is reflected in totalPnl.
+        if (openEntry != null && !chartCandles.isEmpty()) {
+            double lastClose = chartCandles.get(chartCandles.size() - 1).close();
+            double qty = openEntry.quantity();
+            double unrealizedPnl = "BUY".equalsIgnoreCase(openEntry.side())
+                    ? (lastClose - openEntry.price()) * qty
+                    : (openEntry.price() - lastClose) * qty;
+            totalPnl += unrealizedPnl;
         }
         JobTimelineSummary summary = new JobTimelineSummary(
                 wins,
@@ -180,6 +220,23 @@ public class SimPersistenceService {
                 totalPnl,
                 totalFees);
         return new JobTimeline(jobId, chartCandles, events, balance, summary);
+    }
+
+    /**
+     * Classifies a reverse-on-signal close as win/lose by net PnL after open and close taker fees, mirroring
+     * {@code PaperTradingService} accounting. Treated as a loss when the paired ENTRY is missing.
+     */
+    private static boolean isReverseWin(JobTimelineEvent entry, JobTimelineEvent exit, double takerFeeRate) {
+        if (entry == null) {
+            return false;
+        }
+        double qty = exit.quantity();
+        double grossPnl = "BUY".equalsIgnoreCase(entry.side())
+                ? (exit.price() - entry.price()) * qty
+                : (entry.price() - exit.price()) * qty;
+        double openFee = entry.price() * entry.quantity() * takerFeeRate;
+        double closeFee = exit.price() * qty * takerFeeRate;
+        return grossPnl - closeFee - openFee >= 0;
     }
 
     /**
