@@ -59,9 +59,20 @@ Expected behavior:
   - Strategy checks DB kline cache first for requested symbol/interval/date range.
   - If data is missing, strategy calls Binance REST klines with paged batches (max `1500` rows per request), anchored near `endDate`, and continues loading until `startDate` is covered.
   - Newly loaded klines are persisted in DB for future runs (to avoid repeated Binance calls).
-  - Backtest replays each candle with 4-price path.
-  - For each OHLC price: runs strategy engine, then publishes `MARK` (and `SIGNAL` when fired) to Kafka topic `TOPIC_SIMULATE_REPLAY` so `simulate-service` can update mark and TP/SL/liquidation in order.
-  - Live mode still uses `strategy.signal` only; backtest uses the replay topic for ordered paper feed.
+  - Each job is isolated: the replay starts with a `RESET` row that resets the paper account to the configured initial balance, so `balanceUsdt` and `totalPnl` are per-job (not cumulative across runs).
+  - Backtest replays each closed candle by publishing one `CANDLE` row (OHLC + open/close time + interval), plus a `SIGNAL` row (filled on the next candle open) to Kafka topic `TOPIC_SIMULATE_REPLAY`.
+  - `simulate-service` owns the paper lifecycle and resolves intra-candle exits from the `CANDLE` feed (TP/SL via drill-down at the exact bracket price; liquidation via the candle's adverse extreme). It does not persist a chart row per candle during replay — the job chart is served from `strategy.backtest_kline` — which keeps large replays fast.
+  - Live mode still uses `strategy.signal` only; backtest uses the replay topic for the ordered paper feed.
+  - Reporting: `totalPnl` is **realized-only** (closed round-trips). A position still open at the end is reported separately via `unrealizedPnl`, `openPositionActive`, and an `openPosition` object (entry/side/qty/TP/SL/mark price) on `GET /api/v1/backtest/jobs/{jobId}` and the simulate timeline; the UI lists it as an `OPEN` row marked to the last candle close.
+
+#### Intra-candle TP/SL drill-down
+
+- Problem: on a large interval (e.g. `1h`, `1d`) a single candle can touch both TP and SL, so the winner depended on the OHLC comparison order.
+- Solution: when an open position can reach both TP and SL within a candle, `simulate-service` drills into a finer interval to learn which one is hit first, recursively, until it can decide.
+- Fetch rule: finer klines come from `strategy-service` (`POST /api/v1/backtest/klines`), which serves DB cache first and otherwise loads from Binance and persists for reuse.
+- Interval ladder (`BACKTEST_INTERVAL_LADDER`, default `1h,30m,15m,3m,1m`): drilling starts at the largest ladder interval strictly smaller than the parent candle and walks down toward `1m`.
+- Tie-break (`BACKTEST_TIE_BREAK`, default `SL`): if even the finest candle still straddles both levels, that side is assumed to be hit first.
+- Config: `STRATEGY_BASE_URL` points `simulate-service` at `strategy-service`; exits are booked at the exact TP/SL price.
 
 ## M4 additions (execute live path)
 

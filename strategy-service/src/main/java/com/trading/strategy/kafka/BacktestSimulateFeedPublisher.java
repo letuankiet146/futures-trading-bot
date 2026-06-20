@@ -43,6 +43,13 @@ public class BacktestSimulateFeedPublisher {
         send(event, correlationId);
     }
 
+    /** Resets the paper account so each backtest job starts from the configured initial balance. */
+    public void publishReset(String symbol, String correlationId, String timestamp) {
+        SimulateReplayFeedEvent event = baseEvent(symbol, 0.0, SimulateReplayFeedEvent.TYPE_RESET, timestamp);
+        event.setCorrelationId(correlationId);
+        send(event, correlationId);
+    }
+
     public void publishSignal(
             String symbol,
             String side,
@@ -59,9 +66,33 @@ public class BacktestSimulateFeedPublisher {
         send(event, correlationId);
     }
 
+    public void publishCandle(
+            String symbol,
+            String interval,
+            long openTimeMs,
+            long closeTimeMs,
+            double open,
+            double high,
+            double low,
+            double close,
+            String correlationId,
+            String timestamp) {
+        // Carry the close as the canonical price so any legacy MARK-style consumer still sees a value.
+        SimulateReplayFeedEvent event = baseEvent(symbol, close, SimulateReplayFeedEvent.TYPE_CANDLE, timestamp);
+        event.setCorrelationId(correlationId);
+        event.setIntervalCode(interval);
+        event.setOpenTimeMs(openTimeMs);
+        event.setCloseTimeMs(closeTimeMs);
+        event.setOpenPrice(open);
+        event.setHighPrice(high);
+        event.setLowPrice(low);
+        event.setClosePrice(close);
+        send(event, correlationId);
+    }
+
     private static SimulateReplayFeedEvent baseEvent(String symbol, double price, String feedType, String timestamp) {
         SimulateReplayFeedEvent event = new SimulateReplayFeedEvent();
-        event.setSchemaVersion(2);
+        event.setSchemaVersion(3);
         event.setFeedType(feedType);
         event.setSymbol(symbol);
         event.setPrice(price);
@@ -75,7 +106,9 @@ public class BacktestSimulateFeedPublisher {
             throw new IllegalArgumentException("Invalid simulate replay payload: " + violations);
         }
         boolean needsCorrelationId = SimulateReplayFeedEvent.TYPE_SIGNAL.equals(event.getFeedType())
-                || SimulateReplayFeedEvent.TYPE_MARK.equals(event.getFeedType());
+                || SimulateReplayFeedEvent.TYPE_MARK.equals(event.getFeedType())
+                || SimulateReplayFeedEvent.TYPE_CANDLE.equals(event.getFeedType())
+                || SimulateReplayFeedEvent.TYPE_RESET.equals(event.getFeedType());
         if (needsCorrelationId && (event.getCorrelationId() == null || event.getCorrelationId().isBlank())) {
             throw new IllegalArgumentException("Replay rows require correlationId");
         }
@@ -86,6 +119,18 @@ public class BacktestSimulateFeedPublisher {
         if (SimulateReplayFeedEvent.TYPE_SIGNAL.equals(event.getFeedType())
                 && (event.getTakeProfitPrice() == null || event.getStopLossPrice() == null)) {
             throw new IllegalArgumentException("SIGNAL replay rows require takeProfitPrice and stopLossPrice");
+        }
+        if (SimulateReplayFeedEvent.TYPE_CANDLE.equals(event.getFeedType())
+                && (event.getOpenPrice() == null
+                        || event.getHighPrice() == null
+                        || event.getLowPrice() == null
+                        || event.getClosePrice() == null
+                        || event.getOpenTimeMs() == null
+                        || event.getCloseTimeMs() == null
+                        || event.getIntervalCode() == null
+                        || event.getIntervalCode().isBlank())) {
+            throw new IllegalArgumentException(
+                    "CANDLE replay rows require OHLC, openTimeMs, closeTimeMs and intervalCode");
         }
         try {
             String payload = objectMapper.writeValueAsString(event);

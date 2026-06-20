@@ -1,6 +1,5 @@
 package com.trading.strategy.backtest;
 
-import com.trading.strategy.config.BacktestProperties;
 import com.trading.strategy.config.StrategyProperties;
 import com.trading.strategy.engine.ExitBracketCalculator;
 import com.trading.strategy.engine.StrategySignalEvaluator;
@@ -20,17 +19,14 @@ public class BacktestReplayService {
     private static final Logger log = LoggerFactory.getLogger(BacktestReplayService.class);
 
     private final StrategyProperties strategyProperties;
-    private final BacktestProperties backtestProperties;
     private final StrategySignalEvaluator evaluator;
     private final BacktestSimulateFeedPublisher simulateFeedPublisher;
 
     public BacktestReplayService(
             StrategyProperties strategyProperties,
-            BacktestProperties backtestProperties,
             StrategySignalEvaluator evaluator,
             BacktestSimulateFeedPublisher simulateFeedPublisher) {
         this.strategyProperties = strategyProperties;
-        this.backtestProperties = backtestProperties;
         this.evaluator = evaluator;
         this.simulateFeedPublisher = simulateFeedPublisher;
     }
@@ -40,6 +36,12 @@ public class BacktestReplayService {
         String replayCorrelationId = correlationId == null || correlationId.isBlank()
                 ? UUID.randomUUID().toString()
                 : correlationId;
+        // Isolate each job: reset the paper account to its initial balance before replaying this job's feed.
+        String resetTimestamp = candles.isEmpty()
+                ? Instant.now().toString()
+                : Instant.ofEpochMilli(candles.get(0).getOpenTime()).toString();
+        simulateFeedPublisher.publishReset(strategyProperties.getSymbol(), replayCorrelationId, resetTimestamp);
+        simulateFeedPublisher.flush();
         int minCandles = Math.max(strategyProperties.getN(), 2 * strategyProperties.getK() + 2);
         if (candles.size() < minCandles) {
             log.warn("Not enough candles for backtest replay: need at least {} have {}", minCandles, candles.size());
@@ -58,7 +60,6 @@ public class BacktestReplayService {
             if (history.size() < windowN) {
                 continue;
             }
-            List<Double> path = toPricePath(candle);
 
             // Execute a signal raised at the previous candle's close, filling at this candle's open.
             if (pendingSignal && pendingDecision != null) {
@@ -69,7 +70,7 @@ public class BacktestReplayService {
                         entry,
                         pendingDecision.takeProfitPrice(),
                         pendingDecision.stopLossPrice());
-                String openTimestamp = toReplayTimestamp(candle, 0, path.size());
+                String openTimestamp = toReplayTimestamp(candle, 0, 4);
                 simulateFeedPublisher.publishSignal(
                         strategyProperties.getSymbol(),
                         pendingDecision.side(),
@@ -84,14 +85,19 @@ public class BacktestReplayService {
                 pendingDecision = null;
             }
 
-            // Stream marks (O/H/L/C) so TP/SL/liquidation can be tracked intra-candle.
-            for (int i = 0; i < path.size(); i++) {
-                double mark = path.get(i);
-                String eventTimestamp = toReplayTimestamp(candle, i, path.size());
-                simulateFeedPublisher.publishMark(
-                        strategyProperties.getSymbol(), mark, replayCorrelationId, eventTimestamp);
-                simulateFeedPublisher.flush();
-            }
+            // Emit one CANDLE so simulate-service can resolve intra-candle TP/SL order by drilling down.
+            simulateFeedPublisher.publishCandle(
+                    strategyProperties.getSymbol(),
+                    strategyProperties.getInterval(),
+                    candle.getOpenTime(),
+                    candle.getCloseTime(),
+                    candle.getOpen(),
+                    candle.getHigh(),
+                    candle.getLow(),
+                    candle.getClose(),
+                    replayCorrelationId,
+                    toReplayTimestamp(candle, 0, 4));
+            simulateFeedPublisher.flush();
 
             // Evaluate once at the candle close; any signal is deferred to the next candle.
             StrategyDecision decision = evaluator.evaluate(history, candle.getClose());
@@ -112,15 +118,6 @@ public class BacktestReplayService {
                 strategyProperties.getSymbol(),
                 strategyProperties.getInterval());
         return emitted;
-    }
-
-    private List<Double> toPricePath(Candle candle) {
-        String order =
-                backtestProperties.getOhlcOrder() == null ? "OHLC" : backtestProperties.getOhlcOrder().toUpperCase();
-        if ("OLHC".equals(order)) {
-            return List.of(candle.getOpen(), candle.getLow(), candle.getHigh(), candle.getClose());
-        }
-        return List.of(candle.getOpen(), candle.getHigh(), candle.getLow(), candle.getClose());
     }
 
     private String toReplayTimestamp(Candle candle, int stepIndex, int totalSteps) {

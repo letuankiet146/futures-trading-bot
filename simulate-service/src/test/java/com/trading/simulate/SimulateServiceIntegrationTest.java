@@ -1,6 +1,7 @@
 package com.trading.simulate;
 
 import com.trading.contracts.event.StrategySignalEvent;
+import com.trading.simulate.backtest.ReplayCandle;
 import com.trading.simulate.model.JobTimeline;
 import com.trading.simulate.service.PaperTradingService;
 import com.trading.simulate.persistence.repository.PaperAccountSnapshotRepository;
@@ -54,10 +55,14 @@ class SimulateServiceIntegrationTest {
         entry.setTimestamp("2026-04-08T10:00:00Z");
 
         paperTradingService.onStrategySignal(entry);
-        paperTradingService.onReplayMarkPrice(101.0, "job-it-1", "2026-04-08T10:01:00Z");
+        // Unambiguous candle: only TP is reachable (high>=101, low never <=99) so no drill-down is needed.
+        ReplayCandle candle =
+                new ReplayCandle("1h", 1_744_106_460_000L, 1_744_110_059_999L, 100.2, 101.5, 100.0, 101.2);
+        paperTradingService.onReplayCandle("BTCUSDT", candle, "job-it-1");
 
         JobTimeline timeline = paperTradingService.timeline("job-it-1");
-        assertThat(timeline.candles()).isNotEmpty();
+        // Chart candles for backtest are served from strategy klines (not persisted per replay candle here),
+        // so we only assert on trade events and the balance curve.
         assertThat(timeline.events()).extracting("type").contains("ENTRY", "TP");
         assertThat(timeline.balance()).isNotEmpty();
     }

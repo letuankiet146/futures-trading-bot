@@ -6,5 +6,7 @@ public record JobTimelineSummary(
         int liquidations,
         int totalTrades,
         double totalPnl,
-        double totalFees) {
+        double totalFees,
+        double unrealizedPnl,
+        boolean openPositionActive) {
 }

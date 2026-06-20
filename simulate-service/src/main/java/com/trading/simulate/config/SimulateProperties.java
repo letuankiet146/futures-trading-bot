@@ -1,5 +1,6 @@
 package com.trading.simulate.config;
 
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.simulate")
@@ -12,6 +13,15 @@ public class SimulateProperties {
     private Liquidation liquidation = new Liquidation();
     private Auth auth = new Auth();
     private Latency latency = new Latency();
+    private Backtest backtest = new Backtest();
+
+    public Backtest getBacktest() {
+        return backtest;
+    }
+
+    public void setBacktest(Backtest backtest) {
+        this.backtest = backtest;
+    }
 
     public String getSymbol() {
         return symbol;
@@ -172,6 +182,53 @@ public class SimulateProperties {
 
         public void setBlockMs(long blockMs) {
             this.blockMs = blockMs;
+        }
+    }
+
+    /** Intra-candle TP/SL drill-down settings for backtest replay. */
+    public static class Backtest {
+        /** Base URL of strategy-service used to fetch+cache finer-interval klines. */
+        private String strategyBaseUrl = "http://strategy-service:8081";
+
+        /** Interval ladder from coarsest to finest; drilling starts at the largest entry below the parent. */
+        private List<String> intervalLadder = List.of("1h", "30m", "15m", "3m", "1m");
+
+        /** When even this interval still straddles TP and SL, apply the tie-break. */
+        private String finestInterval = "1m";
+
+        /** Tie-break at the finest interval: which side is assumed to be hit first (TP or SL). */
+        private String tieBreak = "SL";
+
+        public String getStrategyBaseUrl() {
+            return strategyBaseUrl;
+        }
+
+        public void setStrategyBaseUrl(String strategyBaseUrl) {
+            this.strategyBaseUrl = strategyBaseUrl;
+        }
+
+        public List<String> getIntervalLadder() {
+            return intervalLadder;
+        }
+
+        public void setIntervalLadder(List<String> intervalLadder) {
+            this.intervalLadder = intervalLadder;
+        }
+
+        public String getFinestInterval() {
+            return finestInterval;
+        }
+
+        public void setFinestInterval(String finestInterval) {
+            this.finestInterval = finestInterval;
+        }
+
+        public String getTieBreak() {
+            return tieBreak;
+        }
+
+        public void setTieBreak(String tieBreak) {
+            this.tieBreak = tieBreak;
         }
     }
 }

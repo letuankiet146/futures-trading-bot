@@ -51,6 +51,7 @@ app:
     initial-balance-usdt: ${SIM_INITIAL_BALANCE_USDT:500}
     sizing:
       mode: ${SIZING_MODE:PERCENT}
+      # Fraction of wallet USDT allocated per trade (1:1 position size, no leverage in sizing).
       account-percent: ${SIZING_ACCOUNT_PERCENT:0.10}
       max-account-percent: ${SIZING_MAX_ACCOUNT_PERCENT:0.10}
       fixed-notional-usdt: ${SIZING_FIXED_NOTIONAL_USDT:20}
@@ -62,3 +63,8 @@ app:
     latency:
       warn-ms: ${LATENCY_WARN_MS:1000}
       block-ms: ${LATENCY_BLOCK_MS:5000}
+    backtest:
+      strategy-base-url: ${STRATEGY_BASE_URL:http://strategy-service:8081}
+      interval-ladder: ${BACKTEST_INTERVAL_LADDER:1h,30m,15m,3m,1m}
+      finest-interval: ${BACKTEST_FINEST_INTERVAL:1m}
+      tie-break: ${BACKTEST_TIE_BREAK:SL}

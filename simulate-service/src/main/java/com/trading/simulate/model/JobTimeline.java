@@ -7,5 +7,6 @@ public record JobTimeline(
         List<JobTimelineCandle> candles,
         List<JobTimelineEvent> events,
         List<JobTimelineBalance> balance,
-        JobTimelineSummary summary) {
+        JobTimelineSummary summary,
+        JobTimelineOpenPosition openPosition) {
 }

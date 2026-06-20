@@ -141,9 +141,9 @@
             </div>
             <div class="ind-row">
                 <label class="name" for="rsiOverbought" style="width:auto;">Over</label>
-                <input type="number" id="rsiOverbought" min="1" max="100" value="60" />
+                <input type="number" id="rsiOverbought" min="1" max="100" value="70" />
                 <label class="name" for="rsiOversold" style="width:auto;">Under</label>
-                <input type="number" id="rsiOversold" min="0" max="99" value="40" />
+                <input type="number" id="rsiOversold" min="0" max="99" value="30" />
             </div>
         </div>
         <div class="ind-divider"></div>
@@ -646,7 +646,7 @@
         // Single source of truth for the initial view; propagates to synced panes.
         priceChart.timeScale().fitContent();
 
-        renderTrades(data.events);
+        renderTrades(data.events, data.openPosition);
 
         const summary = data.summary;
         const firstEvent = data.events[0]?.time;
@@ -657,15 +657,17 @@
             `losses=${summary.losses}`,
             `liquidations=${summary.liquidations}`,
             `trades=${summary.totalTrades}`,
-            `pnl=${summary.totalPnl.toFixed(4)}`,
+            `pnl(realized)=${summary.totalPnl.toFixed(4)}`,
+            summary.openPositionActive ? `unrealized=${(summary.unrealizedPnl ?? 0).toFixed(4)}` : null,
             `fees=${summary.totalFees.toFixed(4)}`,
             firstEvent ? `start(local)=${fmt.format(new Date(firstEvent))}` : null,
             lastEvent ? `end(local)=${fmt.format(new Date(lastEvent))}` : null
         ].filter(Boolean).join(' | ');
     }
 
-    /** Pair ENTRY events with their following exit (TP/SL/REVERSE/LIQUIDATED) into round-trip trades. */
-    function buildTrades(events) {
+    /** Pair ENTRY events with their following exit (TP/SL/REVERSE/LIQUIDATED) into round-trip trades.
+     * A position still open at the end is kept as an OPEN row, marked to openPosition (last candle close). */
+    function buildTrades(events, openPosition) {
         const sorted = [...(events || [])].sort((a, b) => new Date(a.time) - new Date(b.time));
         const trades = [];
         let open = null;
@@ -689,12 +691,22 @@
                 open = null;
             }
         }
-        if (open) trades.push(open);
+        if (open) {
+            // Mark the still-open trade to the last candle close so its unrealized PnL is shown.
+            if (openPosition) {
+                open.markPrice = openPosition.markPrice;
+                open.unrealizedPnl = openPosition.unrealizedPnl;
+            }
+            trades.push(open);
+        }
         return trades;
     }
 
     function tradePnl(t) {
-        if (t.exitPrice == null) return null;
+        if (t.exitPrice == null) {
+            // Open trade: show unrealized PnL marked to the last candle close, if available.
+            return (typeof t.unrealizedPnl === 'number') ? t.unrealizedPnl : null;
+        }
         const dir = (t.side || '').toUpperCase() === 'BUY' ? 1 : -1;
         return (t.exitPrice - t.entryPrice) * dir * (t.qty || 0);
     }
@@ -713,21 +725,25 @@
         }
     }
 
-    function renderTrades(events) {
-        const trades = buildTrades(events);
+    function renderTrades(events, openPosition) {
+        const trades = buildTrades(events, openPosition);
         tradesCount.textContent = String(trades.length);
         tradesBody.innerHTML = '';
         trades.forEach((t, idx) => {
             const tr = document.createElement('tr');
             const pnl = tradePnl(t);
             const pnlClass = pnl == null ? '' : (pnl >= 0 ? 'pnl-pos' : 'pnl-neg');
+            // For an OPEN trade, surface the mark price (last candle close) in the exit-price column.
+            const exitCell = Number.isFinite(t.exitPrice)
+                ? t.exitPrice.toFixed(2)
+                : (Number.isFinite(t.markPrice) ? `${t.markPrice.toFixed(2)} (mark)` : '—');
             const cells = [
                 String(idx + 1),
                 (t.side || '').toUpperCase(),
                 t.entryTime ? fmt.format(new Date(t.entryTime)) : '',
                 t.exitTime ? fmt.format(new Date(t.exitTime)) : '—',
                 Number.isFinite(t.entryPrice) ? t.entryPrice.toFixed(2) : '',
-                Number.isFinite(t.exitPrice) ? t.exitPrice.toFixed(2) : '—',
+                exitCell,
                 Number.isFinite(t.qty) ? t.qty.toFixed(4) : '',
                 pnl == null ? '—' : pnl.toFixed(4),
                 t.result

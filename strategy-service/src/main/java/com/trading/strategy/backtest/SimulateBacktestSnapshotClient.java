@@ -66,6 +66,19 @@ public class SimulateBacktestSnapshotClient {
                 return null;
             }
             Double finalBalance = resolveFinalBalance(timeline);
+            SimulateBacktestSnapshot.OpenPosition openPosition = null;
+            if (timeline.openPosition != null) {
+                OpenPositionDto p = timeline.openPosition;
+                openPosition = new SimulateBacktestSnapshot.OpenPosition(
+                        p.side,
+                        p.entryPrice,
+                        p.quantity,
+                        p.takeProfitPrice,
+                        p.stopLossPrice,
+                        p.markPrice,
+                        p.unrealizedPnl,
+                        p.entryTime);
+            }
             return new SimulateBacktestSnapshot(
                     finalBalance,
                     null,
@@ -76,7 +89,9 @@ public class SimulateBacktestSnapshotClient {
                     timeline.summary.liquidations,
                     timeline.summary.totalPnl,
                     timeline.summary.totalFees,
-                    null);
+                    timeline.summary.openPositionActive,
+                    timeline.summary.unrealizedPnl,
+                    openPosition);
         } catch (Exception e) {
             log.warn("Backtest simulate snapshot unavailable for jobId={}: {}", jobId, e.getMessage());
             return null;
@@ -104,6 +119,7 @@ public class SimulateBacktestSnapshotClient {
     private static class JobTimelineDto {
         public SummaryDto summary;
         public List<BalancePointDto> balance;
+        public OpenPositionDto openPosition;
     }
 
     private static class BalancePointDto {
@@ -117,5 +133,18 @@ public class SimulateBacktestSnapshotClient {
         public int totalTrades;
         public double totalPnl;
         public double totalFees;
+        public double unrealizedPnl;
+        public boolean openPositionActive;
+    }
+
+    private static class OpenPositionDto {
+        public String side;
+        public Double entryPrice;
+        public Double quantity;
+        public Double takeProfitPrice;
+        public Double stopLossPrice;
+        public Double markPrice;
+        public Double unrealizedPnl;
+        public java.time.Instant entryTime;
     }
 }

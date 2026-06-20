@@ -3,6 +3,7 @@ package com.trading.simulate.kafka;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trading.contracts.event.SimulateReplayFeedEvent;
 import com.trading.contracts.event.StrategySignalEvent;
+import com.trading.simulate.backtest.ReplayCandle;
 import com.trading.simulate.config.KafkaTopicsProperties;
 import com.trading.simulate.service.PaperTradingService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -45,9 +46,29 @@ public class SimulateReplayFeedConsumer {
         try {
             SimulateReplayFeedEvent feed = objectMapper.readValue(record.value(), SimulateReplayFeedEvent.class);
             String type = feed.getFeedType() == null ? "" : feed.getFeedType().trim().toUpperCase();
+            if (SimulateReplayFeedEvent.TYPE_RESET.equals(type)) {
+                log.info("SIMULATE replay RESET correlationId={} symbol={}", correlationId, feed.getSymbol());
+                paperTradingService.onReplayReset(feed.getCorrelationId());
+                return;
+            }
             if (SimulateReplayFeedEvent.TYPE_MARK.equals(type)) {
                 log.debug("SIMULATE replay MARK symbol={} price={}", feed.getSymbol(), feed.getPrice());
                 paperTradingService.onReplayMarkPrice(feed.getPrice(), feed.getCorrelationId(), feed.getTimestamp());
+                return;
+            }
+            if (SimulateReplayFeedEvent.TYPE_CANDLE.equals(type)) {
+                ReplayCandle candle = new ReplayCandle(
+                        feed.getIntervalCode(),
+                        feed.getOpenTimeMs(),
+                        feed.getCloseTimeMs(),
+                        feed.getOpenPrice(),
+                        feed.getHighPrice(),
+                        feed.getLowPrice(),
+                        feed.getClosePrice());
+                log.debug("SIMULATE replay CANDLE symbol={} interval={} o={} h={} l={} c={}",
+                        feed.getSymbol(), feed.getIntervalCode(), feed.getOpenPrice(),
+                        feed.getHighPrice(), feed.getLowPrice(), feed.getClosePrice());
+                paperTradingService.onReplayCandle(feed.getSymbol(), candle, feed.getCorrelationId());
                 return;
             }
             if (SimulateReplayFeedEvent.TYPE_SIGNAL.equals(type)) {

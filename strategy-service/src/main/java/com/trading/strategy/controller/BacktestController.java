@@ -116,6 +116,19 @@ public class BacktestController {
             if (BacktestJobRepository.STATUS_SUCCEEDED.equals(row.status()) && row.candlesReplayed() != null) {
                 SimulateResult sim = null;
                 if (liveSnapshot != null) {
+                    OpenPosition openPosition = null;
+                    if (liveSnapshot.openPosition() != null) {
+                        SimulateBacktestSnapshot.OpenPosition p = liveSnapshot.openPosition();
+                        openPosition = new OpenPosition(
+                                p.side(),
+                                p.entryPrice(),
+                                p.quantity(),
+                                p.takeProfitPrice(),
+                                p.stopLossPrice(),
+                                p.markPrice(),
+                                p.unrealizedPnl(),
+                                p.entryTime());
+                    }
                     sim = new SimulateResult(
                             liveSnapshot.balanceUsdt() != null ? liveSnapshot.balanceUsdt() : row.simBalanceUsdt(),
                             liveSnapshot.lastMarkPrice() != null ? liveSnapshot.lastMarkPrice() : row.simLastMarkPrice(),
@@ -128,7 +141,9 @@ public class BacktestController {
                             liveSnapshot.totalFees(),
                             liveSnapshot.openPositionActive() != null
                                     ? liveSnapshot.openPositionActive()
-                                    : row.simOpenPositionActive());
+                                    : row.simOpenPositionActive(),
+                            liveSnapshot.unrealizedPnl(),
+                            openPosition);
                 } else if (row.simBalanceUsdt() != null) {
                     sim = new SimulateResult(
                             row.simBalanceUsdt(),
@@ -140,7 +155,9 @@ public class BacktestController {
                             row.simLiquidationCount(),
                             row.simTotalPnl(),
                             row.simTotalFees(),
-                            row.simOpenPositionActive());
+                            row.simOpenPositionActive(),
+                            null,
+                            null);
                 }
                 res = new Result(row.candlesReplayed(), sim);
             }
@@ -168,6 +185,18 @@ public class BacktestController {
                 Integer liquidationCount,
                 Double totalPnl,
                 Double totalFees,
-                Boolean openPositionActive) {}
+                Boolean openPositionActive,
+                Double unrealizedPnl,
+                OpenPosition openPosition) {}
+
+        public record OpenPosition(
+                String side,
+                Double entryPrice,
+                Double quantity,
+                Double takeProfitPrice,
+                Double stopLossPrice,
+                Double markPrice,
+                Double unrealizedPnl,
+                Instant entryTime) {}
     }
 }

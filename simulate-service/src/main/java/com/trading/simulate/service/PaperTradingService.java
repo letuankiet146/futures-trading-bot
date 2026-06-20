@@ -1,6 +1,8 @@
 package com.trading.simulate.service;
 
 import com.trading.contracts.event.StrategySignalEvent;
+import com.trading.simulate.backtest.BacktestKlineDrillClient;
+import com.trading.simulate.backtest.ReplayCandle;
 import com.trading.simulate.config.SimulateProperties;
 import com.trading.simulate.model.JobTimeline;
 import com.trading.simulate.model.PaperAccountState;
@@ -9,6 +11,7 @@ import com.trading.simulate.model.PaperStats;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,16 +23,19 @@ public class PaperTradingService {
     private final SimulateProperties properties;
     private final SimPersistenceService persistenceService;
     private final SimAuditService auditService;
+    private final BacktestKlineDrillClient drillClient;
     private final Object lock = new Object();
     private PaperAccountState state;
 
     public PaperTradingService(
             SimulateProperties properties,
             SimPersistenceService persistenceService,
-            SimAuditService auditService) {
+            SimAuditService auditService,
+            BacktestKlineDrillClient drillClient) {
         this.properties = properties;
         this.persistenceService = persistenceService;
         this.auditService = auditService;
+        this.drillClient = drillClient;
     }
 
     @PostConstruct
@@ -96,6 +102,110 @@ public class PaperTradingService {
         }
     }
 
+    /**
+     * Replay a full candle. When an open position can touch both TP and SL inside this candle, drill down
+     * into finer intervals (fetched/cached via strategy-service) to learn which one is hit first.
+     */
+    public void onReplayCandle(String symbol, ReplayCandle candle, String correlationId) {
+        synchronized (lock) {
+            String jobId = normalizeJobId(correlationId);
+            if (jobId == null) {
+                log.warn("Missing correlationId in replay CANDLE, skip");
+                return;
+            }
+            resolveCandle(symbol, candle, jobId);
+        }
+    }
+
+    /** Must be called while holding {@link #lock}. */
+    private void resolveCandle(String symbol, ReplayCandle candle, String jobId) {
+        Instant closeTime = Instant.ofEpochMilli(candle.closeTimeMs());
+
+        PaperPosition pos = state.getOpenPosition();
+        if (pos == null || !pos.isActive() || state.isFrozen()) {
+            // Nothing to resolve. Chart data is served from strategy klines, so no per-candle persistence here;
+            // just keep the in-memory mark for continuity.
+            state.setLastMarkPrice(candle.close());
+            return;
+        }
+
+        boolean buy = "BUY".equalsIgnoreCase(pos.getSide());
+        double tp = pos.getTakeProfitPrice();
+        double sl = pos.getStopLossPrice();
+        boolean tpReachable = buy ? candle.high() >= tp : candle.low() <= tp;
+        boolean slReachable = buy ? candle.low() <= sl : candle.high() >= sl;
+
+        if (!tpReachable && !slReachable) {
+            // No TP/SL exit this candle; the position only closes if the adverse extreme triggers liquidation.
+            double adverseExtreme = buy ? candle.low() : candle.high();
+            if (checkLiquidation(adverseExtreme, closeTime)) {
+                return;
+            }
+            state.setLastMarkPrice(candle.close());
+            return;
+        }
+
+        if (tpReachable ^ slReachable) {
+            // Unambiguous: exit at the exact bracket price.
+            if (tpReachable) {
+                closePosition(tp, "TP", closeTime);
+            } else {
+                closePosition(sl, "SL", closeTime);
+            }
+            return;
+        }
+
+        // Ambiguous: this candle can touch both TP and SL. Drill into a finer interval to order them.
+        List<ReplayCandle> finer = drillClient.fetchFiner(symbol, candle);
+        if (finer.isEmpty()) {
+            boolean slFirst = !"TP".equalsIgnoreCase(properties.getBacktest().getTieBreak());
+            log.debug("Drill reached finest interval={} for jobId={}; tie-break {}",
+                    candle.interval(), jobId, slFirst ? "SL" : "TP");
+            if (slFirst) {
+                closePosition(sl, "SL", closeTime);
+            } else {
+                closePosition(tp, "TP", closeTime);
+            }
+            return;
+        }
+        for (ReplayCandle sub : finer) {
+            if (positionClosed()) {
+                state.setLastMarkPrice(sub.close());
+            } else {
+                resolveCandle(symbol, sub, jobId);
+            }
+        }
+    }
+
+    private boolean positionClosed() {
+        PaperPosition pos = state.getOpenPosition();
+        return pos == null || !pos.isActive();
+    }
+
+    /**
+     * Liquidation-only mark check used during candle replay. Unlike {@link #onMarkPriceInternal} it does not
+     * persist per-candle chart rows and does not evaluate TP/SL (those are decided by {@link #resolveCandle}).
+     *
+     * @return true if the position was liquidated
+     */
+    private boolean checkLiquidation(double markPrice, Instant eventTime) {
+        state.setLastMarkPrice(markPrice);
+        PaperPosition pos = state.getOpenPosition();
+        if (pos == null || !pos.isActive() || state.isFrozen()) {
+            return false;
+        }
+        double unrealizedLoss = Math.max(0.0, -computePnl(pos, markPrice));
+        SimulateProperties.Liquidation liq = properties.getLiquidation();
+        // ISOLATED: only the position margin backs the trade. CROSS: the whole wallet backs it.
+        double collateral = liq.isCross() ? state.getBalanceUsdt() : pos.getIsolatedMargin();
+        double trigger = collateral * liq.getIsolatedMarginLossThreshold();
+        if (unrealizedLoss >= trigger) {
+            liquidate(markPrice, eventTime);
+            return true;
+        }
+        return false;
+    }
+
     public PaperAccountState snapshot() {
         synchronized (lock) {
             return copyState(state);
@@ -105,6 +215,14 @@ public class PaperTradingService {
     public void reset() {
         synchronized (lock) {
             resetInternal();
+        }
+    }
+
+    /** Resets the paper account at the start of a backtest job so each replay is isolated. */
+    public void onReplayReset(String jobId) {
+        synchronized (lock) {
+            resetInternal();
+            log.info("SIMULATE replay RESET paper account for backtest jobId={}", jobId);
         }
     }
 
@@ -130,14 +248,17 @@ public class PaperTradingService {
         }
         double tp = takeProfitPrice;
         double sl = stopLossPrice;
-        double notional = resolveNotional(state.getBalanceUsdt());
-        if (notional <= 0 || notional > state.getBalanceUsdt()) {
-            log.warn("Insufficient balance for opening simulated order. balance={} notional={}", state.getBalanceUsdt(), notional);
+        double allocatedUsdt = resolveAllocatedUsdt(state.getBalanceUsdt());
+        if (allocatedUsdt <= 0 || allocatedUsdt > state.getBalanceUsdt()) {
+            log.warn("Insufficient balance for opening simulated order. balance={} allocatedUsdt={}",
+                    state.getBalanceUsdt(), allocatedUsdt);
             auditService.log("OPEN_REJECTED", jobId, "Insufficient balance");
             return;
         }
+        // Position size is 1:1 with allocated USDT — no leverage in sizing.
+        double notional = allocatedUsdt;
         double qty = notional / entryMark;
-        double margin = notional / Math.max(1, properties.getLeverage());
+        double margin = notional;
         double feeOpen = notional * properties.getTakerFee();
 
         PaperPosition position = new PaperPosition();
@@ -164,8 +285,8 @@ public class PaperTradingService {
         persistenceService.saveJobBalance(jobId, state.getBalanceUsdt(), eventTime);
         persistenceService.saveSnapshot(state);
         auditService.log("POSITION_OPENED", jobId, "Paper position opened");
-        log.info("Opened paper position side={} symbol={} qty={} entry={} tp={} sl={}",
-                side, symbol, formatQty(qty), entryMark, tp, sl);
+        log.info("Opened paper position side={} symbol={} qty={} entry={} allocatedUsdt={} tp={} sl={}",
+                side, symbol, formatQty(qty), entryMark, notional, tp, sl);
     }
 
     private void closePosition(double closeMark, String reason, Instant eventTime) {
@@ -259,7 +380,8 @@ public class PaperTradingService {
         return (pos.getEntryPrice() - markPrice) * pos.getQuantity();
     }
 
-    private double resolveNotional(double balance) {
+    /** USDT from wallet used for this trade (balance × sizing percent, or fixed amount). */
+    private double resolveAllocatedUsdt(double balance) {
         SimulateProperties.Sizing s = properties.getSizing();
         if ("FIXED".equalsIgnoreCase(s.getMode())) {
             return s.getFixedNotionalUsdt();

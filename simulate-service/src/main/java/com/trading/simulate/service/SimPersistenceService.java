@@ -6,6 +6,7 @@ import com.trading.simulate.model.JobTimeline;
 import com.trading.simulate.model.JobTimelineBalance;
 import com.trading.simulate.model.JobTimelineCandle;
 import com.trading.simulate.model.JobTimelineEvent;
+import com.trading.simulate.model.JobTimelineOpenPosition;
 import com.trading.simulate.model.JobTimelineSummary;
 import com.trading.simulate.model.PaperPosition;
 import com.trading.simulate.model.PaperStats;
@@ -163,15 +164,29 @@ public class SimPersistenceService {
         int wins = 0;
         int losses = 0;
         int liquidations = 0;
+        double realizedPnl = 0.0;
+        double totalFees = 0.0;
         // Pair each ENTRY with its following exit so reverse-on-signal closes are also counted. A REVERSE
         // close is classified by net PnL (after open+close fees), matching the in-memory PaperStats accounting.
+        // Realized PnL is summed per closed round-trip (gross - openFee - closeFee), mirroring PaperStats.totalPnl
+        // so that totalPnl stays realized-only and consistent with balanceUsdt.
         JobTimelineEvent openEntry = null;
         for (JobTimelineEvent e : events) {
             String type = e.type();
             if ("ENTRY".equals(type)) {
                 openEntry = e;
+                totalFees += e.price() * e.quantity() * takerFeeRate;
                 continue;
             }
+            if (!"TP".equals(type) && !"SL".equals(type)
+                    && !"LIQUIDATED".equals(type) && !"REVERSE".equals(type)) {
+                continue;
+            }
+            double closeFee = e.price() * e.quantity() * takerFeeRate;
+            totalFees += closeFee;
+            double openFee = openEntry != null ? openEntry.price() * openEntry.quantity() * takerFeeRate : 0.0;
+            double grossPnl = grossPnl(openEntry, e);
+            realizedPnl += grossPnl - closeFee - openFee;
             switch (type) {
                 case "TP" -> wins++;
                 case "SL" -> losses++;
@@ -183,43 +198,53 @@ public class SimPersistenceService {
                         losses++;
                     }
                 }
-                default -> {
-                    continue;
-                }
+                default -> { }
             }
             openEntry = null;
         }
         int totalTrades = wins + losses + liquidations;
-        // Liquidations charge no close fee (see PaperTradingService#liquidate), so they are excluded here.
-        double totalFees = events.stream()
-                .filter(e -> "ENTRY".equals(e.type())
-                        || "TP".equals(e.type())
-                        || "SL".equals(e.type())
-                        || "REVERSE".equals(e.type()))
-                .mapToDouble(e -> e.price() * e.quantity() * takerFeeRate)
-                .sum();
-        double totalPnl = 0.0;
-        if (balance.size() >= 2) {
-            totalPnl = balance.get(balance.size() - 1).balanceUsdt() - balance.get(0).balanceUsdt();
-        }
-        // A position still open at the end has no realized balance change yet; mark it to market using the
-        // last candle close so its unrealized PnL is reflected in totalPnl.
-        if (openEntry != null && !chartCandles.isEmpty()) {
-            double lastClose = chartCandles.get(chartCandles.size() - 1).close();
+        // A position still open at the end has no realized balance change yet; mark it to the last candle close
+        // and report its unrealized PnL separately so balanceUsdt and (realized) totalPnl stay consistent.
+        double unrealizedPnl = 0.0;
+        JobTimelineOpenPosition openPosition = null;
+        if (openEntry != null) {
+            double markPrice = chartCandles.isEmpty()
+                    ? openEntry.price()
+                    : chartCandles.get(chartCandles.size() - 1).close();
             double qty = openEntry.quantity();
-            double unrealizedPnl = "BUY".equalsIgnoreCase(openEntry.side())
-                    ? (lastClose - openEntry.price()) * qty
-                    : (openEntry.price() - lastClose) * qty;
-            totalPnl += unrealizedPnl;
+            unrealizedPnl = "BUY".equalsIgnoreCase(openEntry.side())
+                    ? (markPrice - openEntry.price()) * qty
+                    : (openEntry.price() - markPrice) * qty;
+            openPosition = new JobTimelineOpenPosition(
+                    openEntry.side(),
+                    openEntry.price(),
+                    qty,
+                    openEntry.tp(),
+                    openEntry.sl(),
+                    markPrice,
+                    unrealizedPnl,
+                    openEntry.time());
         }
         JobTimelineSummary summary = new JobTimelineSummary(
                 wins,
                 losses,
                 liquidations,
                 totalTrades,
-                totalPnl,
-                totalFees);
-        return new JobTimeline(jobId, chartCandles, events, balance, summary);
+                realizedPnl,
+                totalFees,
+                unrealizedPnl,
+                openPosition != null);
+        return new JobTimeline(jobId, chartCandles, events, balance, summary, openPosition);
+    }
+
+    private static double grossPnl(JobTimelineEvent entry, JobTimelineEvent exit) {
+        if (entry == null) {
+            return 0.0;
+        }
+        double qty = exit.quantity();
+        return "BUY".equalsIgnoreCase(entry.side())
+                ? (exit.price() - entry.price()) * qty
+                : (entry.price() - exit.price()) * qty;
     }
 
     /**

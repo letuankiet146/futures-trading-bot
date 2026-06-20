@@ -16,15 +16,16 @@ public class RiskSizingService {
 
     public double calculateQuantity(double equityUsdt, double markPrice, SymbolFilters filters) {
         ExecuteProperties.Sizing sizing = executeProperties.getSizing();
-        double targetNotional;
+        double allocatedUsdt;
         if ("FIXED".equalsIgnoreCase(sizing.getMode())) {
-            targetNotional = sizing.getFixedNotionalUsdt();
+            allocatedUsdt = sizing.getFixedNotionalUsdt();
         } else {
             double rawPercent = Math.min(sizing.getAccountPercent(), sizing.getMaxAccountPercent());
-            targetNotional = equityUsdt * rawPercent;
+            allocatedUsdt = equityUsdt * rawPercent;
         }
 
-        double quantityRaw = targetNotional / markPrice;
+        // 1:1 position size from allocated USDT — no leverage in sizing.
+        double quantityRaw = allocatedUsdt / markPrice;
         double quantityStepped = floorToStep(quantityRaw, filters.getStepSize());
         quantityStepped = roundToPrecision(quantityStepped, filters.getQuantityPrecision());
         if (quantityStepped < filters.getMinQty()) {
