@@ -1,7 +1,9 @@
 package com.trading.strategy.backtest;
 
 import com.trading.strategy.config.StrategyProperties;
+import com.trading.strategy.backtest.BacktestExitOverrides;
 import com.trading.strategy.engine.ExitBracketCalculator;
+import com.trading.strategy.engine.ExitDistanceResolver;
 import com.trading.strategy.engine.StrategySignalEvaluator;
 import com.trading.strategy.kafka.BacktestSimulateFeedPublisher;
 import com.trading.strategy.model.Candle;
@@ -33,6 +35,12 @@ public class BacktestReplayService {
 
     /** @return number of strategy signals emitted */
     public int replay(List<Candle> candles, String correlationId) {
+        return replay(candles, correlationId, BacktestExitOverrides.none());
+    }
+
+    /** @return number of strategy signals emitted */
+    public int replay(List<Candle> candles, String correlationId, BacktestExitOverrides exitOverrides) {
+        BacktestExitOverrides overrides = exitOverrides == null ? BacktestExitOverrides.none() : exitOverrides;
         String replayCorrelationId = correlationId == null || correlationId.isBlank()
                 ? UUID.randomUUID().toString()
                 : correlationId;
@@ -103,7 +111,7 @@ public class BacktestReplayService {
             StrategyDecision decision = evaluator.evaluate(history, candle.getClose());
             if (decision.shouldSignal()) {
                 pendingSignal = true;
-                pendingDecision = decision;
+                pendingDecision = applyExitOverrides(decision, overrides);
             }
         }
         if (pendingSignal && pendingDecision != null) {
@@ -118,6 +126,28 @@ public class BacktestReplayService {
                 strategyProperties.getSymbol(),
                 strategyProperties.getInterval());
         return emitted;
+    }
+
+    private StrategyDecision applyExitOverrides(StrategyDecision decision, BacktestExitOverrides overrides) {
+        if (!decision.shouldSignal() || !overrides.hasAny()) {
+            return decision;
+        }
+        double tpRate = overrides.tpPercent() != null
+                ? overrides.tpPercent()
+                : ExitDistanceResolver.tpDistanceRate(strategyProperties);
+        double slRate = overrides.slPercent() != null
+                ? overrides.slPercent()
+                : ExitDistanceResolver.slDistanceRate(strategyProperties);
+        double[] bracket = ExitBracketCalculator.percentBracket(
+                decision.side(), decision.signalPrice(), tpRate, slRate);
+        return new StrategyDecision(
+                decision.shouldSignal(),
+                decision.side(),
+                decision.avgTop(),
+                decision.avgBottom(),
+                decision.signalPrice(),
+                bracket[0],
+                bracket[1]);
     }
 
     private String toReplayTimestamp(Candle candle, int stepIndex, int totalSteps) {

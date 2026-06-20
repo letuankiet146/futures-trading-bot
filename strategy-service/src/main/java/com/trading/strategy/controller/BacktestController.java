@@ -1,6 +1,7 @@
 package com.trading.strategy.controller;
 
 import com.trading.strategy.backtest.support.BacktestDateParser;
+import com.trading.strategy.backtest.BacktestExitOverrides;
 import com.trading.strategy.backtest.BacktestJobService;
 import com.trading.strategy.backtest.SimulateBacktestSnapshotClient;
 import com.trading.strategy.persistence.BacktestJobRepository;
@@ -40,7 +41,7 @@ public class BacktestController {
     @PostMapping("/run")
     public ResponseEntity<BacktestRunResponse> run(
             @RequestBody(required = false) BacktestRunRequest request) {
-        BacktestRunRequest req = request == null ? new BacktestRunRequest(null, null) : request;
+        BacktestRunRequest req = request == null ? new BacktestRunRequest(null, null, null, null) : request;
         boolean noStart = req.startDate() == null || req.startDate().isBlank();
         boolean noEnd = req.endDate() == null || req.endDate().isBlank();
         if (noStart && !noEnd) {
@@ -61,12 +62,15 @@ public class BacktestController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
             }
         }
+        validateExitPercent("tpPercent", req.tpPercent());
+        validateExitPercent("slPercent", req.slPercent());
+        BacktestExitOverrides exitOverrides = new BacktestExitOverrides(req.tpPercent(), req.slPercent());
         UUID jobId;
         if (noStart && noEnd) {
-            jobId = jobService.createJob(BacktestRequestSentinels.LAST_1500_KLINES, null);
+            jobId = jobService.createJob(BacktestRequestSentinels.LAST_1500_KLINES, null, exitOverrides);
         } else {
             String endRaw = noEnd ? null : req.endDate();
-            jobId = jobService.createJob(req.startDate(), endRaw);
+            jobId = jobService.createJob(req.startDate(), endRaw, exitOverrides);
         }
         jobService.startJobAsync(jobId);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -92,9 +96,16 @@ public class BacktestController {
     }
 
     /** If both {@code startDate} and {@code endDate} are absent, the job uses the latest 1500 fully closed klines. */
-    public record BacktestRunRequest(String startDate, String endDate) {}
+    public record BacktestRunRequest(String startDate, String endDate, Double tpPercent, Double slPercent) {}
 
     public record BacktestRunResponse(String jobId, String statusPath) {}
+
+    private static void validateExitPercent(String field, Double value) {
+        if (value != null && value <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, field + " must be greater than 0 when provided");
+        }
+    }
 
     public record BacktestJobStatusResponse(
             String jobId,
@@ -104,6 +115,8 @@ public class BacktestController {
             Instant finishedAt,
             Instant effectiveStartDate,
             Instant effectiveEndDate,
+            Double requestTpPercent,
+            Double requestSlPercent,
             String errorMessage,
             Result result) {
 
@@ -169,6 +182,8 @@ public class BacktestController {
                     row.finishedAt(),
                     effStart,
                     effEnd,
+                    row.requestTpPercent(),
+                    row.requestSlPercent(),
                     row.errorMessage(),
                     res);
         }

@@ -10,6 +10,8 @@ public record BacktestJobRow(
         String klineInterval,
         String requestStartRaw,
         String requestEndRaw,
+        Double requestTpPercent,
+        Double requestSlPercent,
         String dedupeKey,
         Long effectiveStartMs,
         Long effectiveEndMs,

@@ -27,17 +27,31 @@ public class BacktestJobService {
     }
 
     @Transactional
-    public UUID createJob(String requestStartRaw, String requestEndRaw) {
+    public UUID createJob(String requestStartRaw, String requestEndRaw, BacktestExitOverrides exitOverrides) {
         String symbol = strategyProperties.getSymbol();
         String interval = strategyProperties.getInterval();
-        String dedupe = BacktestDedupeKeys.build(symbol, interval, requestStartRaw, requestEndRaw);
+        BacktestExitOverrides overrides = exitOverrides == null ? BacktestExitOverrides.none() : exitOverrides;
+        String dedupe = BacktestDedupeKeys.build(
+                symbol,
+                interval,
+                requestStartRaw,
+                requestEndRaw,
+                overrides.tpPercent(),
+                overrides.slPercent());
         Optional<UUID> existing = jobRepo.findActiveIdByDedupeKey(dedupe);
         if (existing.isPresent()) {
             return existing.get();
         }
         UUID id = UUID.randomUUID();
-        Optional<UUID> inserted =
-                jobRepo.insertPendingOrEmptyOnConflict(id, symbol, interval, requestStartRaw, requestEndRaw, dedupe);
+        Optional<UUID> inserted = jobRepo.insertPendingOrEmptyOnConflict(
+                id,
+                symbol,
+                interval,
+                requestStartRaw,
+                requestEndRaw,
+                overrides.tpPercent(),
+                overrides.slPercent(),
+                dedupe);
         if (inserted.isPresent()) {
             return inserted.get();
         }

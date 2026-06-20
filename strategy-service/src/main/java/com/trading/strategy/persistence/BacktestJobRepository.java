@@ -25,6 +25,8 @@ public class BacktestJobRepository {
             rs.getString("kline_interval"),
             rs.getString("request_start_raw"),
             rs.getString("request_end_raw"),
+            rs.getObject("request_tp_percent") != null ? rs.getDouble("request_tp_percent") : null,
+            rs.getObject("request_sl_percent") != null ? rs.getDouble("request_sl_percent") : null,
             rs.getString("dedupe_key"),
             rs.getObject("effective_start_ms") != null ? rs.getLong("effective_start_ms") : null,
             rs.getObject("effective_end_ms") != null ? rs.getLong("effective_end_ms") : null,
@@ -71,12 +73,15 @@ public class BacktestJobRepository {
             String klineInterval,
             String requestStartRaw,
             String requestEndRaw,
+            Double requestTpPercent,
+            Double requestSlPercent,
             String dedupeKey) {
         int n = jdbc.update(
                 """
                 INSERT INTO strategy.backtest_job
-                  (id, status, symbol, kline_interval, request_start_raw, request_end_raw, dedupe_key)
-                VALUES (?,?,?,?,?,?,?)
+                  (id, status, symbol, kline_interval, request_start_raw, request_end_raw,
+                   request_tp_percent, request_sl_percent, dedupe_key)
+                VALUES (?,?,?,?,?,?,?,?,?)
                 """,
                 id,
                 STATUS_PENDING,
@@ -84,6 +89,8 @@ public class BacktestJobRepository {
                 klineInterval,
                 requestStartRaw,
                 requestEndRaw,
+                requestTpPercent,
+                requestSlPercent,
                 dedupeKey);
         if (n != 1) {
             throw new IllegalStateException("insert strategy.backtest_job expected 1 row");
@@ -98,9 +105,12 @@ public class BacktestJobRepository {
             String klineInterval,
             String requestStartRaw,
             String requestEndRaw,
+            Double requestTpPercent,
+            Double requestSlPercent,
             String dedupeKey) {
         try {
-            insertPending(id, symbol, klineInterval, requestStartRaw, requestEndRaw, dedupeKey);
+            insertPending(
+                    id, symbol, klineInterval, requestStartRaw, requestEndRaw, requestTpPercent, requestSlPercent, dedupeKey);
             return Optional.of(id);
         } catch (DuplicateKeyException e) {
             return Optional.empty();

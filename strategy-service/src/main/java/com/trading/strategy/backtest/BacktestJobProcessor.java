@@ -1,5 +1,6 @@
 package com.trading.strategy.backtest;
 
+import com.trading.strategy.backtest.BacktestExitOverrides;
 import com.trading.strategy.backtest.support.BacktestDateParser;
 import com.trading.strategy.config.StrategyProperties;
 import com.trading.strategy.market.BinanceKlineRestClient;
@@ -75,7 +76,9 @@ public class BacktestJobProcessor {
             String symbol = strategyProperties.getSymbol();
             String interval = strategyProperties.getInterval();
             if (BacktestRequestSentinels.isLast1500KlinesRequest(row.requestStartRaw())) {
-                processLast1500Klines(jobId, symbol, interval, nowMs);
+                BacktestExitOverrides exitOverrides =
+                        new BacktestExitOverrides(row.requestTpPercent(), row.requestSlPercent());
+                processLast1500Klines(jobId, symbol, interval, nowMs, exitOverrides);
                 return;
             }
             Instant startInst = BacktestDateParser.parse(row.requestStartRaw());
@@ -96,7 +99,9 @@ public class BacktestJobProcessor {
             jobRepo.updateEffectiveRange(jobId, effStartOpen, effEndOpen);
             backfill.ensureRangeCached(symbol, interval, effStartOpen, effEndOpen);
             List<Candle> candles = klineCache.findCandlesInRange(symbol, interval, effStartOpen, effEndOpen);
-            int signals = replayService.replay(candles, jobId.toString());
+            BacktestExitOverrides exitOverrides =
+                    new BacktestExitOverrides(row.requestTpPercent(), row.requestSlPercent());
+            int signals = replayService.replay(candles, jobId.toString(), exitOverrides);
             SimulateBacktestSnapshot snapshot =
                     simulateSnapshotClient.fetchSnapshotAfterReplay(jobId.toString(), signals);
             jobRepo.markSucceeded(jobId, candles.size(), snapshot);
@@ -111,7 +116,8 @@ public class BacktestJobProcessor {
         }
     }
 
-    private void processLast1500Klines(UUID jobId, String symbol, String interval, long nowMs) {
+    private void processLast1500Klines(
+            UUID jobId, String symbol, String interval, long nowMs, BacktestExitOverrides exitOverrides) {
         List<Candle> page = binanceKlineRestClient.fetchKlinesPage(
                 symbol, interval, null, null, BacktestRequestSentinels.LAST_1500_COUNT);
         List<Candle> closed = new ArrayList<>();
@@ -128,7 +134,7 @@ public class BacktestJobProcessor {
         long effStart = closed.get(0).getOpenTime();
         long effEnd = closed.get(closed.size() - 1).getOpenTime();
         jobRepo.updateEffectiveRange(jobId, effStart, effEnd);
-        int signals = replayService.replay(closed, jobId.toString());
+        int signals = replayService.replay(closed, jobId.toString(), exitOverrides);
         SimulateBacktestSnapshot snapshot =
                 simulateSnapshotClient.fetchSnapshotAfterReplay(jobId.toString(), signals);
         jobRepo.markSucceeded(jobId, closed.size(), snapshot);
