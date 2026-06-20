@@ -44,10 +44,12 @@ class SimulateServiceIntegrationTest {
     @Test
     void timelineContainsEntryAndExitEventsForJob() {
         StrategySignalEvent entry = new StrategySignalEvent();
-        entry.setSchemaVersion(1);
+        entry.setSchemaVersion(2);
         entry.setSymbol("BTCUSDT");
         entry.setSide("BUY");
         entry.setPrice(100.0);
+        entry.setTakeProfitPrice(101.0);
+        entry.setStopLossPrice(99.0);
         entry.setCorrelationId("job-it-1");
         entry.setTimestamp("2026-04-08T10:00:00Z");
 

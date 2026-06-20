@@ -25,15 +25,42 @@
         .ind-row input[type="color"] { width: 28px; height: 24px; padding: 0; border: 1px solid #444; background: #222; border-radius: 4px; cursor: pointer; }
         .ind-divider { width: 1px; align-self: stretch; background: #333; }
         .apply-btn { padding: 6px 14px; cursor: pointer; background: #f0c000; color: #111; border: none; border-radius: 4px; font-weight: bold; align-self: center; }
-        #trades { margin-top: 16px; }
-        #trades h3 { margin: 0 0 8px; font-size: 14px; color: #f0c000; }
-        .trade-wrap { max-height: 300px; overflow: auto; border: 1px solid #333; border-radius: 6px; }
-        #trades table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        #trades th, #trades td { padding: 5px 8px; border-bottom: 1px solid #2a2a2a; text-align: left; white-space: nowrap; }
-        #trades th { color: #f0c000; position: sticky; top: 0; background: #1a1a1a; z-index: 1; }
-        #trades tbody tr { cursor: pointer; }
-        #trades tbody tr:hover { background: #222; }
-        #trades tbody tr.selected { background: #2d2d12; }
+        /* Main content shifts right when the trades panel is pinned open. */
+        .page { transition: margin-left .2s ease; }
+        body.trades-pinned.trades-open .page { margin-left: 392px; }
+
+        /* Left edge tab to open the trades panel. */
+        .trades-tab {
+            position: fixed; left: 0; top: 140px; z-index: 49;
+            writing-mode: vertical-rl; transform: rotate(180deg);
+            background: #f0c000; color: #111; font-weight: bold;
+            padding: 14px 7px; border-radius: 0 6px 6px 0; cursor: pointer;
+            letter-spacing: 1px; user-select: none; box-shadow: 2px 0 6px rgba(0,0,0,.4);
+        }
+        body.trades-open .trades-tab { display: none; }
+
+        /* Sliding left trades panel. */
+        .trades-panel {
+            position: fixed; top: 0; left: 0; bottom: 0;
+            width: 380px; max-width: 88vw;
+            background: #161616; border-right: 1px solid #333;
+            transform: translateX(-100%); transition: transform .2s ease;
+            display: flex; flex-direction: column; z-index: 50;
+            box-shadow: 2px 0 12px rgba(0,0,0,.5);
+        }
+        body.trades-open .trades-panel { transform: translateX(0); }
+        .trades-panel .panel-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #333; }
+        .trades-panel .panel-head h3 { margin: 0; font-size: 14px; color: #f0c000; flex: 1; }
+        .trades-panel .panel-head button { background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; cursor: pointer; padding: 4px 9px; font-size: 12px; }
+        .trades-panel .panel-head button:hover { background: #2a2a2a; }
+        .trades-panel .panel-head button.active { background: #f0c000; color: #111; border-color: #f0c000; }
+        .trade-wrap { flex: 1; overflow: auto; }
+        .trades-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .trades-panel th, .trades-panel td { padding: 5px 8px; border-bottom: 1px solid #2a2a2a; text-align: left; white-space: nowrap; }
+        .trades-panel th { color: #f0c000; position: sticky; top: 0; background: #1a1a1a; z-index: 1; }
+        .trades-panel tbody tr { cursor: pointer; }
+        .trades-panel tbody tr:hover { background: #222; }
+        .trades-panel tbody tr.selected { background: #2d2d12; }
         .pnl-pos { color: #26a69a; }
         .pnl-neg { color: #ef5350; }
         .result-TP { color: #26a69a; }
@@ -44,6 +71,35 @@
     </style>
 </head>
 <body>
+<div class="trades-tab" id="tradesTab">Trades</div>
+
+<aside class="trades-panel" id="tradesPanel">
+    <div class="panel-head">
+        <h3>Trades (<span id="tradesCount">0</span>)</h3>
+        <button id="pinBtn" title="Pin panel (keep open and push content)">Pin</button>
+        <button id="closeBtn" title="Close panel">&times;</button>
+    </div>
+    <div class="trade-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Side</th>
+                    <th>Entry time</th>
+                    <th>Exit time</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>Qty</th>
+                    <th>PnL</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody id="tradesBody"></tbody>
+        </table>
+    </div>
+</aside>
+
+<div class="page">
 <div class="top">
     <label for="jobId">jobId</label>
     <input id="jobId" placeholder="correlationId" />
@@ -116,27 +172,6 @@
 <div id="balance"></div>
 <div class="meta" id="meta"></div>
 <div class="error" id="error"></div>
-
-<div id="trades">
-    <h3>Trades (<span id="tradesCount">0</span>)</h3>
-    <div class="trade-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Side</th>
-                    <th>Entry time</th>
-                    <th>Exit time</th>
-                    <th>Entry</th>
-                    <th>Exit</th>
-                    <th>Qty</th>
-                    <th>PnL</th>
-                    <th>Result</th>
-                </tr>
-            </thead>
-            <tbody id="tradesBody"></tbody>
-        </table>
-    </div>
 </div>
 
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
@@ -153,6 +188,9 @@
     const applyBtn = document.getElementById('applyBtn');
     const tradesBody = document.getElementById('tradesBody');
     const tradesCount = document.getElementById('tradesCount');
+    const tradesTab = document.getElementById('tradesTab');
+    const pinBtn = document.getElementById('pinBtn');
+    const closeBtn = document.getElementById('closeBtn');
     const fmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const localDateFmt = new Intl.DateTimeFormat(undefined, { year: '2-digit', month: '2-digit', day: '2-digit' });
     const localTimeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -420,6 +458,7 @@
 
     function buildChartOptions() {
         return {
+            autoSize: true,
             layout: { background: { color: '#111' }, textColor: '#ddd' },
             grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
             rightPriceScale: { borderColor: '#444' },
@@ -731,6 +770,37 @@
             clearCharts();
         }
     }
+
+    function setTradesPanel(open, pinned) {
+        document.body.classList.toggle('trades-open', open);
+        document.body.classList.toggle('trades-pinned', pinned);
+        pinBtn.classList.toggle('active', pinned);
+        try {
+            localStorage.setItem('simTradesOpen', open ? '1' : '0');
+            localStorage.setItem('simTradesPinned', pinned ? '1' : '0');
+        } catch (_) { /* ignore storage errors */ }
+    }
+
+    tradesTab.addEventListener('click', () => {
+        setTradesPanel(true, document.body.classList.contains('trades-pinned'));
+    });
+    closeBtn.addEventListener('click', () => {
+        setTradesPanel(false, false);
+    });
+    pinBtn.addEventListener('click', () => {
+        const pinned = !document.body.classList.contains('trades-pinned');
+        setTradesPanel(true, pinned);
+    });
+
+    (function initTradesPanel() {
+        let open = false;
+        let pinned = false;
+        try {
+            open = localStorage.getItem('simTradesOpen') === '1';
+            pinned = localStorage.getItem('simTradesPinned') === '1';
+        } catch (_) { /* ignore storage errors */ }
+        setTradesPanel(open || pinned, pinned);
+    })();
 
     loadBtn.addEventListener('click', loadJobTimeline);
     applyBtn.addEventListener('click', () => {

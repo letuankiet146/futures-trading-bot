@@ -25,7 +25,7 @@ public class PeakTroughStrategy implements TradingStrategy {
         int minBarsForSwing = 2 * strategyProperties.getK() + 1;
         int requiredSize = Math.max(nWindow, minBarsForSwing);
         if (closedCandles.size() < requiredSize) {
-            return new StrategyDecision(false, "NONE", 0.0, 0.0, 0.0);
+            return new StrategyDecision(false, "NONE", 0.0, 0.0, 0.0, null, null);
         }
 
         List<SwingPoint> peaks = scanner.findPeaks(closedCandles, strategyProperties.getK());
@@ -44,7 +44,7 @@ public class PeakTroughStrategy implements TradingStrategy {
         boolean feeEnough = Math.max(avgTop, avgBottom) > feeGate;
 
         if (!isMiddle || !feeEnough || peaks.isEmpty() || troughs.isEmpty()) {
-            return new StrategyDecision(false, "NONE", avgTop, avgBottom, 0.0);
+            return new StrategyDecision(false, "NONE", avgTop, avgBottom, 0.0, null, null);
         }
 
         SwingPoint latestPeak = peaks.get(peaks.size() - 1);
@@ -52,6 +52,7 @@ public class PeakTroughStrategy implements TradingStrategy {
         String side = latestPeak.index() > latestTrough.index() ? "SELL" : "BUY";
 
         double lastClose = closedCandles.get(closedCandles.size() - 1).getClose();
-        return new StrategyDecision(true, side, avgTop, avgBottom, lastClose);
+        double[] bracket = ExitBracketCalculator.peakTroughBracket(side, lastClose, avgTop, avgBottom);
+        return new StrategyDecision(true, side, avgTop, avgBottom, lastClose, bracket[0], bracket[1]);
     }
 }

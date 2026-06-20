@@ -62,7 +62,12 @@ public class LiveSignalTrigger {
             return;
         }
 
-        publisher.publishTestSignal(strategyProperties.getSymbol(), decision.side(), decision.signalPrice());
+        publisher.publishSignal(
+                strategyProperties.getSymbol(),
+                decision.side(),
+                decision.signalPrice(),
+                decision.takeProfitPrice(),
+                decision.stopLossPrice());
         var oldest = candles.get(0);
         var newest = candles.get(candles.size() - 1);
         log.info(

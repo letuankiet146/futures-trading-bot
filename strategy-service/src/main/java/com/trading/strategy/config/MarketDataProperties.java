@@ -8,6 +8,10 @@ public class MarketDataProperties {
     private String wsBaseUrl;
     private int restLimit;
     private boolean wsEnabled;
+    /** Pause inserted before each paged kline REST call to stay under Binance IP rate limits. */
+    private long restPageDelayMs = 300;
+    /** Number of retries when Binance responds 429 Too Many Requests. */
+    private int restMaxRetries = 5;
 
     public String getBaseRestUrl() {
         return baseRestUrl;
@@ -39,5 +43,21 @@ public class MarketDataProperties {
 
     public void setWsEnabled(boolean wsEnabled) {
         this.wsEnabled = wsEnabled;
+    }
+
+    public long getRestPageDelayMs() {
+        return restPageDelayMs;
+    }
+
+    public void setRestPageDelayMs(long restPageDelayMs) {
+        this.restPageDelayMs = restPageDelayMs;
+    }
+
+    public int getRestMaxRetries() {
+        return restMaxRetries;
+    }
+
+    public void setRestMaxRetries(int restMaxRetries) {
+        this.restMaxRetries = restMaxRetries;
     }
 }

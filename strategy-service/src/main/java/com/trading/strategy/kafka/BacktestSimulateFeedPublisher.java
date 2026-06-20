@@ -43,16 +43,25 @@ public class BacktestSimulateFeedPublisher {
         send(event, correlationId);
     }
 
-    public void publishSignal(String symbol, String side, double price, String correlationId, String timestamp) {
+    public void publishSignal(
+            String symbol,
+            String side,
+            double price,
+            double takeProfitPrice,
+            double stopLossPrice,
+            String correlationId,
+            String timestamp) {
         SimulateReplayFeedEvent event = baseEvent(symbol, price, SimulateReplayFeedEvent.TYPE_SIGNAL, timestamp);
         event.setSide(side);
         event.setCorrelationId(correlationId);
+        event.setTakeProfitPrice(takeProfitPrice);
+        event.setStopLossPrice(stopLossPrice);
         send(event, correlationId);
     }
 
     private static SimulateReplayFeedEvent baseEvent(String symbol, double price, String feedType, String timestamp) {
         SimulateReplayFeedEvent event = new SimulateReplayFeedEvent();
-        event.setSchemaVersion(1);
+        event.setSchemaVersion(2);
         event.setFeedType(feedType);
         event.setSymbol(symbol);
         event.setPrice(price);
@@ -73,6 +82,10 @@ public class BacktestSimulateFeedPublisher {
         if (SimulateReplayFeedEvent.TYPE_SIGNAL.equals(event.getFeedType())
                 && (event.getSide() == null || event.getSide().isBlank())) {
             throw new IllegalArgumentException("SIGNAL replay rows require side");
+        }
+        if (SimulateReplayFeedEvent.TYPE_SIGNAL.equals(event.getFeedType())
+                && (event.getTakeProfitPrice() == null || event.getStopLossPrice() == null)) {
+            throw new IllegalArgumentException("SIGNAL replay rows require takeProfitPrice and stopLossPrice");
         }
         try {
             String payload = objectMapper.writeValueAsString(event);

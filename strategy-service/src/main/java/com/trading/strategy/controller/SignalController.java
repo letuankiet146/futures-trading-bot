@@ -22,12 +22,19 @@ public class SignalController {
 
     @PostMapping("/test")
     public StrategySignalEvent publish(@RequestBody TestSignalRequest request) {
-        return publisher.publishTestSignal(request.symbol(), request.side(), request.price());
+        return publisher.publishSignal(
+                request.symbol(),
+                request.side(),
+                request.price(),
+                request.takeProfitPrice(),
+                request.stopLossPrice());
     }
 
     public record TestSignalRequest(
             @NotBlank String symbol,
             @NotBlank String side,
-            @NotNull Double price) {
+            @NotNull Double price,
+            @NotNull Double takeProfitPrice,
+            @NotNull Double stopLossPrice) {
     }
 }

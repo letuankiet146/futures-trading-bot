@@ -6,5 +6,7 @@ public record StrategyDecision(
         double avgTop,
         double avgBottom,
         /** Last closed candle close; used as signal execution reference when {@link #shouldSignal} is true. */
-        double signalPrice) {
+        double signalPrice,
+        Double takeProfitPrice,
+        Double stopLossPrice) {
 }

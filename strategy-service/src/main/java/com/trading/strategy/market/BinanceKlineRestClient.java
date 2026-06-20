@@ -9,7 +9,9 @@ import java.util.Collections;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 @Component
@@ -18,10 +20,12 @@ public class BinanceKlineRestClient {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final MarketDataProperties marketDataProperties;
 
     public BinanceKlineRestClient(MarketDataProperties marketDataProperties, ObjectMapper objectMapper) {
         this.restClient = RestClient.builder().baseUrl(marketDataProperties.getBaseRestUrl()).build();
         this.objectMapper = objectMapper;
+        this.marketDataProperties = marketDataProperties;
     }
 
     public List<Candle> loadClosedKlines(String symbol, String interval, int limit) {
@@ -46,7 +50,7 @@ public class BinanceKlineRestClient {
     public List<Candle> fetchKlinesPage(
             String symbol, String interval, Long startTimeMs, Long endTimeMs, int limit) {
         int capped = Math.min(Math.max(limit, 1), 1500);
-        String payload = restClient
+        String payload = getWithThrottleAndRetry(() -> restClient
                 .get()
                 .uri(uriBuilder -> {
                     var b = uriBuilder
@@ -63,9 +67,62 @@ public class BinanceKlineRestClient {
                     return b.build();
                 })
                 .retrieve()
-                .body(String.class);
+                .body(String.class));
 
         return parseKlines(payload);
+    }
+
+    /**
+     * Throttles each paged request and retries on 429 Too Many Requests, honoring {@code Retry-After}
+     * when present and falling back to exponential backoff otherwise.
+     */
+    private String getWithThrottleAndRetry(java.util.function.Supplier<String> call) {
+        sleepMs(marketDataProperties.getRestPageDelayMs());
+        int maxRetries = Math.max(0, marketDataProperties.getRestMaxRetries());
+        HttpClientErrorException lastError = null;
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return call.get();
+            } catch (HttpClientErrorException.TooManyRequests e) {
+                lastError = e;
+                long waitMs = resolveBackoffMs(e, attempt);
+                log.warn(
+                        "Binance 429 Too Many Requests (attempt {}/{}), backing off {} ms",
+                        attempt + 1,
+                        maxRetries + 1,
+                        waitMs);
+                sleepMs(waitMs);
+            }
+        }
+        throw new IllegalStateException("Binance kline REST rate limited after retries", lastError);
+    }
+
+    private long resolveBackoffMs(HttpClientErrorException e, int attempt) {
+        HttpHeaders headers = e.getResponseHeaders();
+        if (headers != null) {
+            String retryAfter = headers.getFirst("Retry-After");
+            if (retryAfter != null) {
+                try {
+                    return Math.max(1000L, Long.parseLong(retryAfter.trim()) * 1000L);
+                } catch (NumberFormatException ignored) {
+                    // fall through to exponential backoff
+                }
+            }
+        }
+        long base = Math.max(1000L, marketDataProperties.getRestPageDelayMs());
+        return base * (1L << Math.min(attempt, 5));
+    }
+
+    private void sleepMs(long ms) {
+        if (ms <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while throttling Binance kline REST calls", e);
+        }
     }
 
     private List<Candle> parseKlines(String payload) {

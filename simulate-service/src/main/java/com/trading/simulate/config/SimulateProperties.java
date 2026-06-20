@@ -7,11 +7,6 @@ public class SimulateProperties {
     private String symbol;
     private int leverage;
     private double takerFee;
-    private double feeGateMultiplier;
-    private double tpMultiplier;
-    private double slMultiplier;
-    private double takeProfitPercent;
-    private double stopLossPercent;
     private double initialBalanceUsdt;
     private Sizing sizing = new Sizing();
     private Liquidation liquidation = new Liquidation();
@@ -40,46 +35,6 @@ public class SimulateProperties {
 
     public void setTakerFee(double takerFee) {
         this.takerFee = takerFee;
-    }
-
-    public double getFeeGateMultiplier() {
-        return feeGateMultiplier;
-    }
-
-    public void setFeeGateMultiplier(double feeGateMultiplier) {
-        this.feeGateMultiplier = feeGateMultiplier;
-    }
-
-    public double getTpMultiplier() {
-        return tpMultiplier;
-    }
-
-    public void setTpMultiplier(double tpMultiplier) {
-        this.tpMultiplier = tpMultiplier;
-    }
-
-    public double getSlMultiplier() {
-        return slMultiplier;
-    }
-
-    public void setSlMultiplier(double slMultiplier) {
-        this.slMultiplier = slMultiplier;
-    }
-
-    public double getTakeProfitPercent() {
-        return takeProfitPercent;
-    }
-
-    public void setTakeProfitPercent(double takeProfitPercent) {
-        this.takeProfitPercent = takeProfitPercent;
-    }
-
-    public double getStopLossPercent() {
-        return stopLossPercent;
-    }
-
-    public void setStopLossPercent(double stopLossPercent) {
-        this.stopLossPercent = stopLossPercent;
     }
 
     public double getInitialBalanceUsdt() {
@@ -162,7 +117,21 @@ public class SimulateProperties {
     }
 
     public static class Liquidation {
+        /** ISOLATED: only the position margin is collateral. CROSS: the whole wallet balance is collateral. */
+        private String marginMode = "ISOLATED";
         private double isolatedMarginLossThreshold;
+
+        public String getMarginMode() {
+            return marginMode;
+        }
+
+        public void setMarginMode(String marginMode) {
+            this.marginMode = marginMode;
+        }
+
+        public boolean isCross() {
+            return "CROSS".equalsIgnoreCase(marginMode);
+        }
 
         public double getIsolatedMarginLossThreshold() {
             return isolatedMarginLossThreshold;

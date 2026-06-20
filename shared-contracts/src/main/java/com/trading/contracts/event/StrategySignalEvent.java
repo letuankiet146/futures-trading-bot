@@ -24,6 +24,12 @@ public class StrategySignalEvent {
     @NotBlank
     private String timestamp;
 
+    @NotNull
+    private Double takeProfitPrice;
+
+    @NotNull
+    private Double stopLossPrice;
+
     public Integer getSchemaVersion() {
         return schemaVersion;
     }
@@ -70,5 +76,21 @@ public class StrategySignalEvent {
 
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public Double getTakeProfitPrice() {
+        return takeProfitPrice;
+    }
+
+    public void setTakeProfitPrice(Double takeProfitPrice) {
+        this.takeProfitPrice = takeProfitPrice;
+    }
+
+    public Double getStopLossPrice() {
+        return stopLossPrice;
+    }
+
+    public void setStopLossPrice(Double stopLossPrice) {
+        this.stopLossPrice = stopLossPrice;
     }
 }

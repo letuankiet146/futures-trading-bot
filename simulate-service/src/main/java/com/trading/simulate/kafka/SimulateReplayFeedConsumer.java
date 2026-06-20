@@ -56,6 +56,8 @@ public class SimulateReplayFeedConsumer {
                 event.setSymbol(feed.getSymbol());
                 event.setSide(feed.getSide());
                 event.setPrice(feed.getPrice());
+                event.setTakeProfitPrice(feed.getTakeProfitPrice());
+                event.setStopLossPrice(feed.getStopLossPrice());
                 event.setCorrelationId(feed.getCorrelationId());
                 event.setTimestamp(feed.getTimestamp());
                 log.info("SIMULATE replay SIGNAL correlationId={} symbol={} side={} topic={}",

@@ -14,6 +14,7 @@ public class StrategyProperties {
     private double similarityThreshold;
     private long triggerMs;
     private long minSignalIntervalMs;
+    private Exit exit = new Exit();
     private VortexScalping vortex = new VortexScalping();
 
     public String getType() {
@@ -102,6 +103,53 @@ public class StrategyProperties {
 
     public void setMinSignalIntervalMs(long minSignalIntervalMs) {
         this.minSignalIntervalMs = minSignalIntervalMs;
+    }
+
+    public Exit getExit() {
+        return exit;
+    }
+
+    public void setExit(Exit exit) {
+        this.exit = exit;
+    }
+
+    public static class Exit {
+        private double takeProfitPercent;
+        private double stopLossPercent;
+        private double tpMultiplier = 1.0;
+        private double slMultiplier = 1.0;
+
+        public double getTakeProfitPercent() {
+            return takeProfitPercent;
+        }
+
+        public void setTakeProfitPercent(double takeProfitPercent) {
+            this.takeProfitPercent = takeProfitPercent;
+        }
+
+        public double getStopLossPercent() {
+            return stopLossPercent;
+        }
+
+        public void setStopLossPercent(double stopLossPercent) {
+            this.stopLossPercent = stopLossPercent;
+        }
+
+        public double getTpMultiplier() {
+            return tpMultiplier;
+        }
+
+        public void setTpMultiplier(double tpMultiplier) {
+            this.tpMultiplier = tpMultiplier;
+        }
+
+        public double getSlMultiplier() {
+            return slMultiplier;
+        }
+
+        public void setSlMultiplier(double slMultiplier) {
+            this.slMultiplier = slMultiplier;
+        }
     }
 
     public static class VortexScalping {

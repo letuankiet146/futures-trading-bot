@@ -77,11 +77,15 @@ public class LiveExecutionService {
         persistenceService.saveFill(event.getSymbol(), event.getSide(), quantity, event.getPrice(), "ENTRY");
         auditService.log("ENTRY_SUBMITTED", event.getCorrelationId(), "Entry order submitted: " + entryClientId);
 
+        if (event.getTakeProfitPrice() == null || event.getStopLossPrice() == null) {
+            log.warn("Execution skipped: strategy signal missing TP/SL correlationId={}", event.getCorrelationId());
+            auditService.log("BRACKET_REJECTED", event.getCorrelationId(), "Missing strategy TP/SL on signal");
+            return;
+        }
+
         String closingSide = "BUY".equalsIgnoreCase(event.getSide()) ? "SELL" : "BUY";
-        double tpRawDistance = "BUY".equalsIgnoreCase(event.getSide()) ? event.getPrice() * (4 * executeProperties.getTakerFee()) : -event.getPrice() * (4 * executeProperties.getTakerFee());
-        double slRawDistance = -tpRawDistance;
-        double tpPrice = sizingService.normalizeStopPrice(event.getPrice() + tpRawDistance, filters);
-        double slPrice = sizingService.normalizeStopPrice(event.getPrice() + slRawDistance, filters);
+        double tpPrice = sizingService.normalizeStopPrice(event.getTakeProfitPrice(), filters);
+        double slPrice = sizingService.normalizeStopPrice(event.getStopLossPrice(), filters);
 
         String tpId = "tp-" + shortId();
         String slId = "sl-" + shortId();

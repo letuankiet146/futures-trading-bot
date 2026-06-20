@@ -2,6 +2,7 @@ package com.trading.strategy.backtest;
 
 import com.trading.strategy.config.BacktestProperties;
 import com.trading.strategy.config.StrategyProperties;
+import com.trading.strategy.engine.ExitBracketCalculator;
 import com.trading.strategy.engine.StrategySignalEvaluator;
 import com.trading.strategy.kafka.BacktestSimulateFeedPublisher;
 import com.trading.strategy.model.Candle;
@@ -49,7 +50,7 @@ public class BacktestReplayService {
         // Strategy is evaluated once per closed candle. A raised signal is deferred and executed on the
         // next candle's open, so the backtest never trades on a candle whose close it could not have seen yet.
         boolean pendingSignal = false;
-        String pendingSide = null;
+        StrategyDecision pendingDecision = null;
         for (int candleIdx = 0; candleIdx < candles.size(); candleIdx++) {
             Candle candle = candles.get(candleIdx);
             int windowStart = Math.max(0, candleIdx - windowN + 1);
@@ -60,18 +61,27 @@ public class BacktestReplayService {
             List<Double> path = toPricePath(candle);
 
             // Execute a signal raised at the previous candle's close, filling at this candle's open.
-            if (pendingSignal) {
+            if (pendingSignal && pendingDecision != null) {
+                double entry = candle.getOpen();
+                double[] bracket = ExitBracketCalculator.recenterAtEntry(
+                        pendingDecision.side(),
+                        pendingDecision.signalPrice(),
+                        entry,
+                        pendingDecision.takeProfitPrice(),
+                        pendingDecision.stopLossPrice());
                 String openTimestamp = toReplayTimestamp(candle, 0, path.size());
                 simulateFeedPublisher.publishSignal(
                         strategyProperties.getSymbol(),
-                        pendingSide,
-                        candle.getOpen(),
+                        pendingDecision.side(),
+                        entry,
+                        bracket[0],
+                        bracket[1],
                         replayCorrelationId,
                         openTimestamp);
                 simulateFeedPublisher.flush();
                 emitted++;
                 pendingSignal = false;
-                pendingSide = null;
+                pendingDecision = null;
             }
 
             // Stream marks (O/H/L/C) so TP/SL/liquidation can be tracked intra-candle.
@@ -87,11 +97,13 @@ public class BacktestReplayService {
             StrategyDecision decision = evaluator.evaluate(history, candle.getClose());
             if (decision.shouldSignal()) {
                 pendingSignal = true;
-                pendingSide = decision.side();
+                pendingDecision = decision;
             }
         }
-        if (pendingSignal) {
-            log.info("Replay ended with a pending {} signal but no next candle to execute it on", pendingSide);
+        if (pendingSignal && pendingDecision != null) {
+            log.info(
+                    "Replay ended with a pending {} signal but no next candle to execute it on",
+                    pendingDecision.side());
         }
         log.info(
                 "Backtest replay completed candles={} emittedSignals={} symbol={} interval={}",

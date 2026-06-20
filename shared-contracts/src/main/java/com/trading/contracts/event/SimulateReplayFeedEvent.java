@@ -35,6 +35,12 @@ public class SimulateReplayFeedEvent {
     /** Required when feedType is SIGNAL. */
     private String correlationId;
 
+    /** Required when feedType is SIGNAL. */
+    private Double takeProfitPrice;
+
+    /** Required when feedType is SIGNAL. */
+    private Double stopLossPrice;
+
     public Integer getSchemaVersion() {
         return schemaVersion;
     }
@@ -89,5 +95,21 @@ public class SimulateReplayFeedEvent {
 
     public void setCorrelationId(String correlationId) {
         this.correlationId = correlationId;
+    }
+
+    public Double getTakeProfitPrice() {
+        return takeProfitPrice;
+    }
+
+    public void setTakeProfitPrice(Double takeProfitPrice) {
+        this.takeProfitPrice = takeProfitPrice;
+    }
+
+    public Double getStopLossPrice() {
+        return stopLossPrice;
+    }
+
+    public void setStopLossPrice(Double stopLossPrice) {
+        this.stopLossPrice = stopLossPrice;
     }
 }

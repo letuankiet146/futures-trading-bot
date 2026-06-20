@@ -9,6 +9,7 @@ import com.trading.simulate.model.PaperStats;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -66,7 +67,14 @@ public class PaperTradingService {
                     return;
                 }
             }
-            openPosition(event.getSymbol(), event.getSide(), event.getPrice(), jobId, eventTime);
+            openPosition(
+                    event.getSymbol(),
+                    event.getSide(),
+                    event.getPrice(),
+                    event.getTakeProfitPrice(),
+                    event.getStopLossPrice(),
+                    jobId,
+                    eventTime);
         }
     }
 
@@ -106,7 +114,22 @@ public class PaperTradingService {
         }
     }
 
-    private void openPosition(String symbol, String side, double entryMark, String jobId, Instant eventTime) {
+    private void openPosition(
+            String symbol,
+            String side,
+            double entryMark,
+            Double takeProfitPrice,
+            Double stopLossPrice,
+            String jobId,
+            Instant eventTime) {
+        if (!isValidBracket(side, entryMark, takeProfitPrice, stopLossPrice)) {
+            log.warn("Reject open: strategy signal missing or invalid TP/SL jobId={} side={} entry={} tp={} sl={}",
+                    jobId, side, entryMark, takeProfitPrice, stopLossPrice);
+            auditService.log("OPEN_REJECTED", jobId, "Missing or invalid strategy TP/SL");
+            return;
+        }
+        double tp = takeProfitPrice;
+        double sl = stopLossPrice;
         double notional = resolveNotional(state.getBalanceUsdt());
         if (notional <= 0 || notional > state.getBalanceUsdt()) {
             log.warn("Insufficient balance for opening simulated order. balance={} notional={}", state.getBalanceUsdt(), notional);
@@ -116,18 +139,6 @@ public class PaperTradingService {
         double qty = notional / entryMark;
         double margin = notional / Math.max(1, properties.getLeverage());
         double feeOpen = notional * properties.getTakerFee();
-
-        double tpDistanceRate = resolveTpDistanceRate();
-        double slDistanceRate = resolveSlDistanceRate();
-        double tp;
-        double sl;
-        if ("BUY".equalsIgnoreCase(side)) {
-            tp = entryMark * (1 + tpDistanceRate);
-            sl = entryMark * (1 - slDistanceRate);
-        } else {
-            tp = entryMark * (1 - tpDistanceRate);
-            sl = entryMark * (1 + slDistanceRate);
-        }
 
         PaperPosition position = new PaperPosition();
         position.setActive(true);
@@ -154,7 +165,7 @@ public class PaperTradingService {
         persistenceService.saveSnapshot(state);
         auditService.log("POSITION_OPENED", jobId, "Paper position opened");
         log.info("Opened paper position side={} symbol={} qty={} entry={} tp={} sl={}",
-                side, symbol, qty, entryMark, tp, sl);
+                side, symbol, formatQty(qty), entryMark, tp, sl);
     }
 
     private void closePosition(double closeMark, String reason, Instant eventTime) {
@@ -207,15 +218,21 @@ public class PaperTradingService {
         if (pos == null || !pos.isActive()) {
             return;
         }
-        // Isolated mode: liquidation only wipes the notional allocated to this position.
-        double liquidationLoss = pos.getNotional();
-        state.setBalanceUsdt(Math.max(0.0, state.getBalanceUsdt() - liquidationLoss));
+        // Forced close at the liquidation mark. The realized loss is bounded by the position margin
+        // in ISOLATED mode and by the whole wallet in CROSS mode (via the trigger in onMarkPriceInternal).
+        double pnl = computePnl(pos, markPrice);
+        double closeNotional = pos.getQuantity() * markPrice;
+        double feeClose = closeNotional * properties.getTakerFee();
+        double net = pnl - feeClose;
+        double netAfterAllFees = net - pos.getOpenFee();
+        state.setBalanceUsdt(Math.max(0.0, state.getBalanceUsdt() + net));
         pos.setActive(false);
         state.setOpenPosition(null);
 
         PaperStats stats = state.getStats();
         stats.setTotalTrades(stats.getTotalTrades() + 1);
-        stats.setTotalPnl(stats.getTotalPnl() - (liquidationLoss + pos.getOpenFee()));
+        stats.setTotalPnl(stats.getTotalPnl() + netAfterAllFees);
+        stats.setTotalFees(stats.getTotalFees() + feeClose);
         stats.setLiquidationCount(stats.getLiquidationCount() + 1);
         persistenceService.saveFill(pos.getSymbol(), pos.getSide(), pos.getQuantity(), markPrice, "LIQUIDATED");
         persistenceService.saveTradeEvent(
@@ -229,9 +246,10 @@ public class PaperTradingService {
                 eventTime);
         persistenceService.saveJobBalance(pos.getJobId(), state.getBalanceUsdt(), eventTime);
         persistenceService.saveSnapshot(state);
-        auditService.log("LIQUIDATION", pos.getJobId(), "Paper isolated liquidation");
-        log.warn("Paper isolated liquidation occurred at mark={} liquidationLoss={} account remains active",
-                markPrice, liquidationLoss);
+        String mode = properties.getLiquidation().isCross() ? "CROSS" : "ISOLATED";
+        auditService.log("LIQUIDATION", pos.getJobId(), "Paper " + mode + " liquidation");
+        log.warn("Paper {} liquidation at mark={} realizedNet={} account remains active",
+                mode, markPrice, net);
     }
 
     private double computePnl(PaperPosition pos, double markPrice) {
@@ -250,20 +268,17 @@ public class PaperTradingService {
         return balance * pct;
     }
 
-    private double resolveTpDistanceRate() {
-        if (properties.getTakeProfitPercent() > 0) {
-            return properties.getTakeProfitPercent();
+    private static boolean isValidBracket(String side, double entry, Double tp, Double sl) {
+        if (tp == null || sl == null || tp <= 0 || sl <= 0 || entry <= 0) {
+            return false;
         }
-        double distanceRate = properties.getFeeGateMultiplier() * properties.getTakerFee();
-        return distanceRate * properties.getTpMultiplier();
-    }
-
-    private double resolveSlDistanceRate() {
-        if (properties.getStopLossPercent() > 0) {
-            return properties.getStopLossPercent();
+        if ("BUY".equalsIgnoreCase(side)) {
+            return tp > entry && sl < entry;
         }
-        double distanceRate = properties.getFeeGateMultiplier() * properties.getTakerFee();
-        return distanceRate * properties.getSlMultiplier();
+        if ("SELL".equalsIgnoreCase(side)) {
+            return tp < entry && sl > entry;
+        }
+        return false;
     }
 
     private void resetInternal() {
@@ -346,10 +361,18 @@ public class PaperTradingService {
         }
 
         double unrealizedLoss = Math.max(0.0, -computePnl(pos, markPrice));
-        double trigger = pos.getIsolatedMargin() * properties.getLiquidation().getIsolatedMarginLossThreshold();
+        SimulateProperties.Liquidation liq = properties.getLiquidation();
+        // ISOLATED: only the position margin backs the trade. CROSS: the whole wallet backs it,
+        // so the loss must consume the threshold fraction of total balance before liquidation.
+        double collateral = liq.isCross() ? state.getBalanceUsdt() : pos.getIsolatedMargin();
+        double trigger = collateral * liq.getIsolatedMarginLossThreshold();
         if (unrealizedLoss >= trigger) {
             liquidate(markPrice, eventTime);
         }
+    }
+
+    private static String formatQty(double qty) {
+        return String.format(Locale.US, "%.8f", qty);
     }
 
     private String normalizeJobId(String rawCorrelationId) {

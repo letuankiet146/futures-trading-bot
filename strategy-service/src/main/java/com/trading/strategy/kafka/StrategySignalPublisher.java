@@ -37,12 +37,15 @@ public class StrategySignalPublisher {
         this.topicsProperties = topicsProperties;
     }
 
-    public StrategySignalEvent publishTestSignal(String symbol, String side, double price) {
+    public StrategySignalEvent publishSignal(
+            String symbol, String side, double price, double takeProfitPrice, double stopLossPrice) {
         StrategySignalEvent event = new StrategySignalEvent();
-        event.setSchemaVersion(1);
+        event.setSchemaVersion(2);
         event.setSymbol(symbol);
         event.setSide(side);
         event.setPrice(price);
+        event.setTakeProfitPrice(takeProfitPrice);
+        event.setStopLossPrice(stopLossPrice);
         event.setCorrelationId(UUID.randomUUID().toString());
         event.setTimestamp(Instant.now().toString());
 

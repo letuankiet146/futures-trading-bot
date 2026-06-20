@@ -71,15 +71,23 @@ public class VortexScalpingStrategy implements TradingStrategy {
                 ;
 
         if (longEntry) {
-            return new StrategyDecision(true, "BUY", ema, rsi, price);
+            double[] bracket = percentBracket("BUY", price);
+            return new StrategyDecision(true, "BUY", ema, rsi, price, bracket[0], bracket[1]);
         }
         if (shortEntry) {
-            return new StrategyDecision(true, "SELL", ema, rsi, price);
+            double[] bracket = percentBracket("SELL", price);
+            return new StrategyDecision(true, "SELL", ema, rsi, price, bracket[0], bracket[1]);
         }
-        return new StrategyDecision(false, "NONE", ema, rsi, 0.0);
+        return new StrategyDecision(false, "NONE", ema, rsi, 0.0, null, null);
+    }
+
+    private double[] percentBracket(String side, double price) {
+        double tpRate = ExitDistanceResolver.tpDistanceRate(strategyProperties);
+        double slRate = ExitDistanceResolver.slDistanceRate(strategyProperties);
+        return ExitBracketCalculator.percentBracket(side, price, tpRate, slRate);
     }
 
     private StrategyDecision noSignal() {
-        return new StrategyDecision(false, "NONE", 0.0, 0.0, 0.0);
+        return new StrategyDecision(false, "NONE", 0.0, 0.0, 0.0, null, null);
     }
 }

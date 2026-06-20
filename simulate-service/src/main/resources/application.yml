@@ -48,11 +48,6 @@ app:
     symbol: ${SYMBOL:BTCUSDT}
     leverage: ${LEVERAGE:20}
     taker-fee: ${TAKER_FEE:0.0005}
-    fee-gate-multiplier: ${FEE_GATE_MULTIPLIER:4.0}
-    tp-multiplier: ${SIM_TP_MULTIPLIER:1.0}
-    sl-multiplier: ${SIM_SL_MULTIPLIER:1.0}
-    take-profit-percent: ${SIM_TP_PERCENT:0.005}
-    stop-loss-percent: ${SIM_SL_PERCENT:0.003}
     initial-balance-usdt: ${SIM_INITIAL_BALANCE_USDT:500}
     sizing:
       mode: ${SIZING_MODE:PERCENT}
@@ -60,6 +55,7 @@ app:
       max-account-percent: ${SIZING_MAX_ACCOUNT_PERCENT:0.10}
       fixed-notional-usdt: ${SIZING_FIXED_NOTIONAL_USDT:20}
     liquidation:
+      margin-mode: ${MARGIN_MODE:ISOLATED}
       isolated-margin-loss-threshold: ${SIM_LIQUIDATION_MARGIN_LOSS_THRESHOLD:0.8}
     auth:
       admin-token: ${ADMIN_TOKEN:change-me}

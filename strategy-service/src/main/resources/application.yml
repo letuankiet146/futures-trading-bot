@@ -48,6 +48,11 @@ app:
     similarity-threshold: ${SIMILARITY_THRESHOLD:0.001}
     trigger-ms: ${STRATEGY_TRIGGER_MS:2000}
     min-signal-interval-ms: ${MIN_SIGNAL_INTERVAL_MS:10000}
+    exit:
+      take-profit-percent: ${STRATEGY_TP_PERCENT:0.005}
+      stop-loss-percent: ${STRATEGY_SL_PERCENT:0.003}
+      tp-multiplier: ${STRATEGY_TP_MULTIPLIER:1.0}
+      sl-multiplier: ${STRATEGY_SL_MULTIPLIER:1.0}
     vortex:
       ema-period: ${VORTEX_EMA_PERIOD:20}
       rsi-period: ${VORTEX_RSI_PERIOD:14}
@@ -61,6 +66,8 @@ app:
     ws-base-url: ${BINANCE_WS_BASE_URL:wss://fstream.binance.com}
     rest-limit: ${REST_KLINE_LIMIT:500}
     ws-enabled: ${WS_ENABLED:true}
+    rest-page-delay-ms: ${REST_KLINE_PAGE_DELAY_MS:300}
+    rest-max-retries: ${REST_KLINE_MAX_RETRIES:5}
   backtest:
     enabled: ${BACKTEST_ENABLED:false}
     standalone-exit: ${BACKTEST_STANDALONE_EXIT:true}
