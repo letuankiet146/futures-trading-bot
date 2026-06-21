@@ -49,8 +49,10 @@ app:
     trigger-ms: ${STRATEGY_TRIGGER_MS:2000}
     min-signal-interval-ms: ${MIN_SIGNAL_INTERVAL_MS:10000}
     exit:
+      # A value <= 0 disables that leg: no take-profit / no stop-loss on the signal.
       take-profit-percent: ${STRATEGY_TP_PERCENT:0.005}
       stop-loss-percent: ${STRATEGY_SL_PERCENT:0.003}
+      # Deprecated: fee-based fallback multipliers are no longer applied (a non-positive percent now means "disabled").
       tp-multiplier: ${STRATEGY_TP_MULTIPLIER:1.0}
       sl-multiplier: ${STRATEGY_SL_MULTIPLIER:1.0}
     vortex:

@@ -178,6 +178,23 @@ public class SimPersistenceService {
                 totalFees += e.price() * e.quantity() * takerFeeRate;
                 continue;
             }
+            if ("AVERAGE".equals(type)) {
+                // Fold an averaging (DCA) leg into the open entry: size-weighted average price and summed
+                // quantity, keeping the latest re-centered TP/SL and the original entry time.
+                totalFees += e.price() * e.quantity() * takerFeeRate;
+                if (openEntry == null) {
+                    openEntry = new JobTimelineEvent(
+                            "ENTRY", e.side(), e.price(), e.quantity(), e.tp(), e.sl(), e.time());
+                } else {
+                    double totalQty = openEntry.quantity() + e.quantity();
+                    double avgPrice = totalQty == 0
+                            ? openEntry.price()
+                            : (openEntry.price() * openEntry.quantity() + e.price() * e.quantity()) / totalQty;
+                    openEntry = new JobTimelineEvent(
+                            "ENTRY", openEntry.side(), avgPrice, totalQty, e.tp(), e.sl(), openEntry.time());
+                }
+                continue;
+            }
             if (!"TP".equals(type) && !"SL".equals(type)
                     && !"LIQUIDATED".equals(type) && !"REVERSE".equals(type)) {
                 continue;

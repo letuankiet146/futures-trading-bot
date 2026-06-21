@@ -11,6 +11,7 @@ public class SimulateProperties {
     private double initialBalanceUsdt;
     private Sizing sizing = new Sizing();
     private Liquidation liquidation = new Liquidation();
+    private Averaging averaging = new Averaging();
     private Auth auth = new Auth();
     private Latency latency = new Latency();
     private Backtest backtest = new Backtest();
@@ -69,6 +70,14 @@ public class SimulateProperties {
 
     public void setLiquidation(Liquidation liquidation) {
         this.liquidation = liquidation;
+    }
+
+    public Averaging getAveraging() {
+        return averaging;
+    }
+
+    public void setAveraging(Averaging averaging) {
+        this.averaging = averaging;
     }
 
     public Auth getAuth() {
@@ -149,6 +158,29 @@ public class SimulateProperties {
 
         public void setIsolatedMarginLossThreshold(double isolatedMarginLossThreshold) {
             this.isolatedMarginLossThreshold = isolatedMarginLossThreshold;
+        }
+    }
+
+    public static class Averaging {
+        /** When true, a same-side signal on an open position adds to it (DCA) instead of being ignored. */
+        private boolean enabled = false;
+        /** Max number of entry legs per position (initial + averages). 0 means unlimited. */
+        private int maxEntries = 0;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMaxEntries() {
+            return maxEntries;
+        }
+
+        public void setMaxEntries(int maxEntries) {
+            this.maxEntries = maxEntries;
         }
     }
 

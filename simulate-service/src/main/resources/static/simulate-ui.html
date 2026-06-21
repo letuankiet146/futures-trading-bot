@@ -12,7 +12,17 @@
         #chart { width: 100%; height: 460px; border: 1px solid #333; }
         #rsi { width: 100%; height: 160px; border: 1px solid #333; margin-top: 14px; }
         #ratio { width: 100%; height: 160px; border: 1px solid #333; margin-top: 14px; }
-        #balance { width: 100%; height: 200px; border: 1px solid #333; margin-top: 14px; }
+        #balance { width: 100%; height: min(72vh, 640px); border: 1px solid #333; }
+        .view-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+        .view-tab {
+            padding: 8px 16px; cursor: pointer; background: #222; color: #bbb;
+            border: 1px solid #444; border-radius: 6px; font-size: 13px; font-weight: bold;
+        }
+        .view-tab:hover { background: #2a2a2a; color: #eee; }
+        .view-tab.active { background: #f0c000; color: #111; border-color: #f0c000; }
+        .view-panel { display: none; }
+        .view-panel.active { display: block; }
+        .balance-caption { margin: 0 0 10px; color: #aaa; font-size: 13px; }
         .meta { margin-top: 10px; color: #bbb; font-size: 13px; }
         .error { color: #ff6b6b; margin-top: 10px; }
         .indicators { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
@@ -58,9 +68,9 @@
         .trades-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .trades-panel th, .trades-panel td { padding: 5px 8px; border-bottom: 1px solid #2a2a2a; text-align: left; white-space: nowrap; }
         .trades-panel th { color: #f0c000; position: sticky; top: 0; background: #1a1a1a; z-index: 1; }
-        .trades-panel tbody tr { cursor: pointer; }
-        .trades-panel tbody tr:hover { background: #222; }
-        .trades-panel tbody tr.selected { background: #2d2d12; }
+        .trade-time-link { color: #4fc3f7; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+        .trade-time-link:hover { color: #81d4fa; }
+        .trade-time-link.active { color: #f0c000; }
         .pnl-pos { color: #26a69a; }
         .pnl-neg { color: #ef5350; }
         .result-TP { color: #26a69a; }
@@ -126,7 +136,7 @@
             <div class="ind-row">
                 <input type="checkbox" id="ema3On" checked />
                 <label class="name" for="ema3Period">EMA3</label>
-                <input type="number" id="ema3Period" min="1" max="1000" value="99" />
+                <input type="number" id="ema3Period" min="1" max="1000" value="110" />
                 <input type="color" id="ema3Color" value="#b388ff" />
             </div>
         </div>
@@ -166,10 +176,22 @@
     </div>
 </div>
 
-<div id="chart"></div>
-<div id="rsi"></div>
-<div id="ratio"></div>
-<div id="balance"></div>
+<div class="view-tabs">
+    <button type="button" class="view-tab active" id="tabMarket">Market</button>
+    <button type="button" class="view-tab" id="tabBalance">Balance</button>
+</div>
+
+<div id="marketPanel" class="view-panel active">
+    <div id="chart"></div>
+    <div id="rsi"></div>
+    <div id="ratio"></div>
+</div>
+
+<div id="balancePanel" class="view-panel">
+    <p class="balance-caption">Account equity curve (USDT) — pan/zoom synced with Market tab when switching.</p>
+    <div id="balance"></div>
+</div>
+
 <div class="meta" id="meta"></div>
 <div class="error" id="error"></div>
 </div>
@@ -185,6 +207,10 @@
     const rsiHost = document.getElementById('rsi');
     const ratioHost = document.getElementById('ratio');
     const balanceHost = document.getElementById('balance');
+    const marketPanel = document.getElementById('marketPanel');
+    const balancePanel = document.getElementById('balancePanel');
+    const tabMarket = document.getElementById('tabMarket');
+    const tabBalance = document.getElementById('tabBalance');
     const applyBtn = document.getElementById('applyBtn');
     const tradesBody = document.getElementById('tradesBody');
     const tradesCount = document.getElementById('tradesCount');
@@ -200,6 +226,49 @@
     let ratioChart = null;
     let balanceChart = null;
     let lastTimelineData = null;
+    /** Normalized candle bars (epoch sec) for the current timeline — used to focus the chart on a trade. */
+    let lastBarData = null;
+    let activeViewTab = 'market';
+
+    function setViewTab(tab) {
+        activeViewTab = tab;
+        marketPanel.classList.toggle('active', tab === 'market');
+        balancePanel.classList.toggle('active', tab === 'balance');
+        tabMarket.classList.toggle('active', tab === 'market');
+        tabBalance.classList.toggle('active', tab === 'balance');
+        requestAnimationFrame(() => {
+            if (tab === 'balance') {
+                syncRangeToBalance();
+                if (balanceChart) balanceChart.applyOptions({ autoSize: true });
+            } else {
+                syncRangeToMarket();
+                if (priceChart) priceChart.applyOptions({ autoSize: true });
+            }
+        });
+        try { localStorage.setItem('simViewTab', tab); } catch (_) { /* ignore */ }
+    }
+
+    function syncRangeToBalance() {
+        if (!priceChart || !balanceChart) return;
+        const range = priceChart.timeScale().getVisibleLogicalRange();
+        if (range) balanceChart.timeScale().setVisibleLogicalRange(range);
+    }
+
+    function syncRangeToMarket() {
+        if (!priceChart || !balanceChart) return;
+        const range = balanceChart.timeScale().getVisibleLogicalRange();
+        if (range) priceChart.timeScale().setVisibleLogicalRange(range);
+    }
+
+    function setVisibleLogicalRangeAll(from, to) {
+        const range = { from, to };
+        try {
+            if (priceChart) priceChart.timeScale().setVisibleLogicalRange(range);
+            if (balanceChart) balanceChart.timeScale().setVisibleLogicalRange(range);
+        } catch (err) {
+            console.warn('Unable to set chart range', err);
+        }
+    }
 
     function toEpochSec(isoTime) {
         return Math.floor(new Date(isoTime).getTime() / 1000);
@@ -392,6 +461,19 @@
         return best;
     }
 
+    function barIndexForTimeSec(barsAsc, timeSec) {
+        let lo = 0;
+        let hi = barsAsc.length - 1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            const t = barsAsc[mid].time;
+            if (t === timeSec) return mid;
+            if (t < timeSec) lo = mid + 1;
+            else hi = mid - 1;
+        }
+        return Math.max(0, Math.min(barsAsc.length - 1, lo - 1));
+    }
+
     function normalizeMarkers(events, candleBarsAsc) {
         const markers = [];
         const used = new Set();
@@ -404,13 +486,16 @@
             const key = `${t}|${e.type}|${e.side}|${e.price}`;
             if (used.has(key)) continue;
             used.add(key);
+            const isEntryLike = e.type === 'ENTRY' || e.type === 'AVERAGE';
             markers.push({
                 time: t,
-                position: (e.type === 'ENTRY' ? (e.side === 'BUY' ? 'belowBar' : 'aboveBar') : 'aboveBar'),
+                position: (isEntryLike ? (e.side === 'BUY' ? 'belowBar' : 'aboveBar') : 'aboveBar'),
                 color: e.type === 'ENTRY'
                     ? (e.side === 'BUY' ? '#4caf50' : '#ef5350')
-                    : (e.type === 'TP' ? '#4caf50' : (e.type === 'SL' ? '#ef5350' : '#ff9800')),
-                shape: e.type === 'ENTRY'
+                    : e.type === 'AVERAGE'
+                        ? '#42a5f5'
+                        : (e.type === 'TP' ? '#4caf50' : (e.type === 'SL' ? '#ef5350' : '#ff9800')),
+                shape: isEntryLike
                     ? (e.side === 'BUY' ? 'arrowUp' : 'arrowDown')
                     : 'circle',
                 text: `${e.type} @ ${e.price.toFixed(2)}`
@@ -428,6 +513,7 @@
         rsiChart = null;
         ratioChart = null;
         balanceChart = null;
+        lastBarData = null;
         if (tradesBody) tradesBody.innerHTML = '';
         if (tradesCount) tradesCount.textContent = '0';
     }
@@ -544,6 +630,7 @@
         lastTimelineData = data;
         priceChart = LightweightCharts.createChart(chartHost, buildChartOptions());
         const barData = normalizeCandles(data.candles);
+        lastBarData = barData;
         const candleData = barData.map(c => ({
             time: c.time,
             open: c.open,
@@ -641,10 +728,12 @@
         const balanceData = normalizeBalance(data.balance);
         // Align equity curve to the candle axis so all panes share one time scale (stable zoom sync).
         balanceSeries.setData(barData.length ? forwardFillToBars(barData, balanceData) : balanceData);
+        balanceChart.timeScale().fitContent();
 
-        syncTimeScales([priceChart, rsiChart, ratioChart, balanceChart]);
-        // Single source of truth for the initial view; propagates to synced panes.
+        syncTimeScales([priceChart, rsiChart, ratioChart]);
+        // Single source of truth for the initial view; propagates to synced market panes.
         priceChart.timeScale().fitContent();
+        syncRangeToBalance();
 
         renderTrades(data.events, data.openPosition);
 
@@ -663,6 +752,8 @@
             firstEvent ? `start(local)=${fmt.format(new Date(firstEvent))}` : null,
             lastEvent ? `end(local)=${fmt.format(new Date(lastEvent))}` : null
         ].filter(Boolean).join(' | ');
+
+        setViewTab(activeViewTab);
     }
 
     /** Pair ENTRY events with their following exit (TP/SL/REVERSE/LIQUIDATED) into round-trip trades.
@@ -683,6 +774,25 @@
                     exitPrice: null,
                     result: 'OPEN'
                 };
+            } else if (e.type === 'AVERAGE') {
+                // DCA leg: fold into the open trade as a size-weighted average entry.
+                if (open) {
+                    const totalQty = (open.qty || 0) + (e.quantity || 0);
+                    open.entryPrice = totalQty === 0
+                        ? open.entryPrice
+                        : (open.entryPrice * (open.qty || 0) + e.price * (e.quantity || 0)) / totalQty;
+                    open.qty = totalQty;
+                } else {
+                    open = {
+                        side: e.side,
+                        entryTime: e.time,
+                        entryPrice: e.price,
+                        qty: e.quantity,
+                        exitTime: null,
+                        exitPrice: null,
+                        result: 'OPEN'
+                    };
+                }
             } else if (open) {
                 open.exitTime = e.time;
                 open.exitPrice = e.price;
@@ -711,17 +821,30 @@
         return (t.exitPrice - t.entryPrice) * dir * (t.qty || 0);
     }
 
-    /** Move all (synced) charts to focus on the given trade's time window. */
-    function focusChartOnRange(entryIso, exitIso) {
-        if (!priceChart) return;
-        const from = toEpochSec(entryIso);
-        const to = Number.isFinite(toEpochSec(exitIso)) && exitIso ? toEpochSec(exitIso) : from;
-        const span = Math.max(to - from, 1);
-        const pad = Math.max(60, Math.round(span * 0.6));
+    /** Pan all (synced) charts so the given event time sits at the horizontal center. */
+    function focusChartOnTime(eventIso) {
+        if (!priceChart || !lastBarData || !lastBarData.length || !eventIso) return;
+        const bars = lastBarData;
+        const barTime = snapEventToBarTimeSec(eventIso, bars);
+        const centerIdx = barIndexForTimeSec(bars, barTime);
+        const ts = priceChart.timeScale();
+        const range = ts.getVisibleLogicalRange();
+        const half = range ? (range.to - range.from) / 2 : 12;
+        let from = centerIdx - half;
+        let to = centerIdx + half;
+        if (from < 0) {
+            to -= from;
+            from = 0;
+        }
+        const maxTo = bars.length - 1 + 0.5;
+        if (to > maxTo) {
+            from = Math.max(0, from - (to - maxTo));
+            to = maxTo;
+        }
         try {
-            priceChart.timeScale().setVisibleRange({ from: from - pad, to: to + pad });
+            setVisibleLogicalRangeAll(from, to);
         } catch (err) {
-            console.warn('Unable to focus chart range', err);
+            console.warn('Unable to focus chart on time', err);
         }
     }
 
@@ -753,12 +876,26 @@
                 td.textContent = text;
                 if (i === 7 && pnlClass) td.className = pnlClass;
                 if (i === 8) td.className = `result-${t.result}`;
+                if (i === 2 && t.entryTime) {
+                    td.className = 'trade-time-link';
+                    td.title = 'Go to entry on chart';
+                    td.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        for (const el of tradesBody.querySelectorAll('.trade-time-link.active')) el.classList.remove('active');
+                        td.classList.add('active');
+                        focusChartOnTime(t.entryTime);
+                    });
+                } else if (i === 3 && t.exitTime) {
+                    td.className = 'trade-time-link';
+                    td.title = 'Go to exit on chart';
+                    td.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        for (const el of tradesBody.querySelectorAll('.trade-time-link.active')) el.classList.remove('active');
+                        td.classList.add('active');
+                        focusChartOnTime(t.exitTime);
+                    });
+                }
                 tr.appendChild(td);
-            });
-            tr.addEventListener('click', () => {
-                for (const el of tradesBody.querySelectorAll('tr.selected')) el.classList.remove('selected');
-                tr.classList.add('selected');
-                focusChartOnRange(t.entryTime, t.exitTime);
             });
             tradesBody.appendChild(tr);
         });
@@ -816,6 +953,18 @@
             pinned = localStorage.getItem('simTradesPinned') === '1';
         } catch (_) { /* ignore storage errors */ }
         setTradesPanel(open || pinned, pinned);
+    })();
+
+    tabMarket.addEventListener('click', () => setViewTab('market'));
+    tabBalance.addEventListener('click', () => setViewTab('balance'));
+
+    (function initViewTab() {
+        let tab = 'market';
+        try {
+            const saved = localStorage.getItem('simViewTab');
+            if (saved === 'market' || saved === 'balance') tab = saved;
+        } catch (_) { /* ignore */ }
+        setViewTab(tab);
     })();
 
     loadBtn.addEventListener('click', loadJobTimeline);

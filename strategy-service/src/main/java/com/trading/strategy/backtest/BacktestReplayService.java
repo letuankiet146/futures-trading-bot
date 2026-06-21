@@ -3,7 +3,6 @@ package com.trading.strategy.backtest;
 import com.trading.strategy.config.StrategyProperties;
 import com.trading.strategy.backtest.BacktestExitOverrides;
 import com.trading.strategy.engine.ExitBracketCalculator;
-import com.trading.strategy.engine.ExitDistanceResolver;
 import com.trading.strategy.engine.StrategySignalEvaluator;
 import com.trading.strategy.kafka.BacktestSimulateFeedPublisher;
 import com.trading.strategy.model.Candle;
@@ -72,7 +71,7 @@ public class BacktestReplayService {
             // Execute a signal raised at the previous candle's close, filling at this candle's open.
             if (pendingSignal && pendingDecision != null) {
                 double entry = candle.getOpen();
-                double[] bracket = ExitBracketCalculator.recenterAtEntry(
+                Double[] bracket = ExitBracketCalculator.recenterAtEntryNullable(
                         pendingDecision.side(),
                         pendingDecision.signalPrice(),
                         entry,
@@ -132,13 +131,14 @@ public class BacktestReplayService {
         if (!decision.shouldSignal() || !overrides.hasAny()) {
             return decision;
         }
+        // A non-positive rate disables that leg (no TP / no SL).
         double tpRate = overrides.tpPercent() != null
                 ? overrides.tpPercent()
-                : ExitDistanceResolver.tpDistanceRate(strategyProperties);
+                : strategyProperties.getExit().getTakeProfitPercent();
         double slRate = overrides.slPercent() != null
                 ? overrides.slPercent()
-                : ExitDistanceResolver.slDistanceRate(strategyProperties);
-        double[] bracket = ExitBracketCalculator.percentBracket(
+                : strategyProperties.getExit().getStopLossPercent();
+        Double[] bracket = ExitBracketCalculator.percentBracketNullable(
                 decision.side(), decision.signalPrice(), tpRate, slRate);
         return new StrategyDecision(
                 decision.shouldSignal(),

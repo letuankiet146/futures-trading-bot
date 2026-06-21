@@ -54,13 +54,14 @@ public class BacktestSimulateFeedPublisher {
             String symbol,
             String side,
             double price,
-            double takeProfitPrice,
-            double stopLossPrice,
+            Double takeProfitPrice,
+            Double stopLossPrice,
             String correlationId,
             String timestamp) {
         SimulateReplayFeedEvent event = baseEvent(symbol, price, SimulateReplayFeedEvent.TYPE_SIGNAL, timestamp);
         event.setSide(side);
         event.setCorrelationId(correlationId);
+        // null TP/SL means the signal has no take-profit / stop-loss bracket.
         event.setTakeProfitPrice(takeProfitPrice);
         event.setStopLossPrice(stopLossPrice);
         send(event, correlationId);
@@ -116,10 +117,7 @@ public class BacktestSimulateFeedPublisher {
                 && (event.getSide() == null || event.getSide().isBlank())) {
             throw new IllegalArgumentException("SIGNAL replay rows require side");
         }
-        if (SimulateReplayFeedEvent.TYPE_SIGNAL.equals(event.getFeedType())
-                && (event.getTakeProfitPrice() == null || event.getStopLossPrice() == null)) {
-            throw new IllegalArgumentException("SIGNAL replay rows require takeProfitPrice and stopLossPrice");
-        }
+        // takeProfitPrice / stopLossPrice are optional: null means no TP / no SL on this signal.
         if (SimulateReplayFeedEvent.TYPE_CANDLE.equals(event.getFeedType())
                 && (event.getOpenPrice() == null
                         || event.getHighPrice() == null

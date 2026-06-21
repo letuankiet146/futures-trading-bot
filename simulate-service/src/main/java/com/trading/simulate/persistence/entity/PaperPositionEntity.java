@@ -22,10 +22,10 @@ public class PaperPositionEntity {
     private double quantity;
     @Column(nullable = false)
     private double entryPrice;
-    @Column(nullable = false)
-    private double takeProfitPrice;
-    @Column(nullable = false)
-    private double stopLossPrice;
+    @Column
+    private Double takeProfitPrice;
+    @Column
+    private Double stopLossPrice;
     @Column(nullable = false, length = 32)
     private String status;
     @Column(length = 128)
@@ -42,10 +42,10 @@ public class PaperPositionEntity {
     public void setQuantity(double quantity) { this.quantity = quantity; }
     public double getEntryPrice() { return entryPrice; }
     public void setEntryPrice(double entryPrice) { this.entryPrice = entryPrice; }
-    public double getTakeProfitPrice() { return takeProfitPrice; }
-    public void setTakeProfitPrice(double takeProfitPrice) { this.takeProfitPrice = takeProfitPrice; }
-    public double getStopLossPrice() { return stopLossPrice; }
-    public void setStopLossPrice(double stopLossPrice) { this.stopLossPrice = stopLossPrice; }
+    public Double getTakeProfitPrice() { return takeProfitPrice; }
+    public void setTakeProfitPrice(Double takeProfitPrice) { this.takeProfitPrice = takeProfitPrice; }
+    public Double getStopLossPrice() { return stopLossPrice; }
+    public void setStopLossPrice(Double stopLossPrice) { this.stopLossPrice = stopLossPrice; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getCorrelationId() { return correlationId; }

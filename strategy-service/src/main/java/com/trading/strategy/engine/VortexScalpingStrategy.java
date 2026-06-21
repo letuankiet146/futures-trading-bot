@@ -61,30 +61,31 @@ public class VortexScalpingStrategy implements TradingStrategy {
 
         boolean longEntry = price > ema
                 && rsi <= cfg.getRsiOversold()
-                && currentTakerBuy > cfg.getTakerBuyVolumeMultiplier() * avgTakerBuy
+                // && currentTakerBuy > cfg.getTakerBuyVolumeMultiplier() * avgTakerBuy
                 ;
 
         boolean shortEntry = price < ema
                 && rsi >= cfg.getRsiOverbought()
-                && takerSellVol > currentTakerBuy
-                && currentBuyRatio < avgBuyRatio * cfg.getTakerBuyRatioDropFactor()
+                // && takerSellVol > currentTakerBuy
+                // && currentBuyRatio < avgBuyRatio * cfg.getTakerBuyRatioDropFactor()
                 ;
 
         if (longEntry) {
-            double[] bracket = percentBracket("BUY", price);
+            Double[] bracket = percentBracket("BUY", price);
             return new StrategyDecision(true, "BUY", ema, rsi, price, bracket[0], bracket[1]);
         }
         if (shortEntry) {
-            double[] bracket = percentBracket("SELL", price);
+            Double[] bracket = percentBracket("SELL", price);
             return new StrategyDecision(true, "SELL", ema, rsi, price, bracket[0], bracket[1]);
         }
         return new StrategyDecision(false, "NONE", ema, rsi, 0.0, null, null);
     }
 
-    private double[] percentBracket(String side, double price) {
-        double tpRate = ExitDistanceResolver.tpDistanceRate(strategyProperties);
-        double slRate = ExitDistanceResolver.slDistanceRate(strategyProperties);
-        return ExitBracketCalculator.percentBracket(side, price, tpRate, slRate);
+    private Double[] percentBracket(String side, double price) {
+        // A non-positive configured percent disables that leg (no TP / no SL).
+        StrategyProperties.Exit exit = strategyProperties.getExit();
+        return ExitBracketCalculator.percentBracketNullable(
+                side, price, exit.getTakeProfitPercent(), exit.getStopLossPercent());
     }
 
     private StrategyDecision noSignal() {

@@ -38,7 +38,7 @@ public class StrategySignalPublisher {
     }
 
     public StrategySignalEvent publishSignal(
-            String symbol, String side, double price, double takeProfitPrice, double stopLossPrice) {
+            String symbol, String side, double price, Double takeProfitPrice, Double stopLossPrice) {
         StrategySignalEvent event = new StrategySignalEvent();
         event.setSchemaVersion(2);
         event.setSymbol(symbol);

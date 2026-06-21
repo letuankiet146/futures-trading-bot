@@ -64,6 +64,7 @@ public class BacktestController {
         }
         validateExitPercent("tpPercent", req.tpPercent());
         validateExitPercent("slPercent", req.slPercent());
+        // Note: a value <= 0 is allowed and means "disable that leg" (no TP / no SL).
         BacktestExitOverrides exitOverrides = new BacktestExitOverrides(req.tpPercent(), req.slPercent());
         UUID jobId;
         if (noStart && noEnd) {
@@ -101,9 +102,10 @@ public class BacktestController {
     public record BacktestRunResponse(String jobId, String statusPath) {}
 
     private static void validateExitPercent(String field, Double value) {
-        if (value != null && value <= 0) {
+        // A value <= 0 disables that leg (no TP / no SL); only reject non-finite numbers.
+        if (value != null && (value.isNaN() || value.isInfinite())) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, field + " must be greater than 0 when provided");
+                    HttpStatus.BAD_REQUEST, field + " must be a finite number");
         }
     }
 

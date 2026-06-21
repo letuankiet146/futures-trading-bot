@@ -10,11 +10,14 @@ public class PaperPosition {
     private double quantity;
     private double notional;
     private double isolatedMargin;
-    private double takeProfitPrice;
-    private double stopLossPrice;
+    /** null means no take-profit on this position. */
+    private Double takeProfitPrice;
+    /** null means no stop-loss on this position. */
+    private Double stopLossPrice;
     private double openFee;
     private boolean active;
     private Instant openedAt;
+    private int entryCount = 1;
 
     public String getJobId() {
         return jobId;
@@ -72,19 +75,19 @@ public class PaperPosition {
         this.isolatedMargin = isolatedMargin;
     }
 
-    public double getTakeProfitPrice() {
+    public Double getTakeProfitPrice() {
         return takeProfitPrice;
     }
 
-    public void setTakeProfitPrice(double takeProfitPrice) {
+    public void setTakeProfitPrice(Double takeProfitPrice) {
         this.takeProfitPrice = takeProfitPrice;
     }
 
-    public double getStopLossPrice() {
+    public Double getStopLossPrice() {
         return stopLossPrice;
     }
 
-    public void setStopLossPrice(double stopLossPrice) {
+    public void setStopLossPrice(Double stopLossPrice) {
         this.stopLossPrice = stopLossPrice;
     }
 
@@ -110,5 +113,13 @@ public class PaperPosition {
 
     public void setOpenedAt(Instant openedAt) {
         this.openedAt = openedAt;
+    }
+
+    public int getEntryCount() {
+        return entryCount;
+    }
+
+    public void setEntryCount(int entryCount) {
+        this.entryCount = entryCount;
     }
 }

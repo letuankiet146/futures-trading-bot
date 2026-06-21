@@ -58,6 +58,9 @@ app:
     liquidation:
       margin-mode: ${MARGIN_MODE:ISOLATED}
       isolated-margin-loss-threshold: ${SIM_LIQUIDATION_MARGIN_LOSS_THRESHOLD:0.8}
+    averaging:
+      enabled: ${SIM_AVERAGING_ENABLED:false}
+      max-entries: ${SIM_AVERAGING_MAX_ENTRIES:0}
     auth:
       admin-token: ${ADMIN_TOKEN:change-me}
     latency:

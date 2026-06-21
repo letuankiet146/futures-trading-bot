@@ -24,10 +24,10 @@ public class StrategySignalEvent {
     @NotBlank
     private String timestamp;
 
-    @NotNull
+    /** Optional: null (or a non-positive configured percent) means no take-profit on this signal. */
     private Double takeProfitPrice;
 
-    @NotNull
+    /** Optional: null (or a non-positive configured percent) means no stop-loss on this signal. */
     private Double stopLossPrice;
 
     public Integer getSchemaVersion() {

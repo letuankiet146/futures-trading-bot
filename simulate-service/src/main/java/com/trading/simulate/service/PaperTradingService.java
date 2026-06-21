@@ -69,7 +69,16 @@ public class PaperTradingService {
                     auditService.log("POSITION_REVERSED", jobId, "Reverse signal closes current position before re-entry");
                     closePosition(event.getPrice(), "REVERSE", eventTime);
                 } else {
-                    // Same-side signal while position is active: ignore.
+                    // Same-side signal while position is active: average in (DCA) if enabled, otherwise ignore.
+                    if (properties.getAveraging().isEnabled()) {
+                        averageIntoPosition(
+                                event.getSymbol(),
+                                event.getPrice(),
+                                event.getTakeProfitPrice(),
+                                event.getStopLossPrice(),
+                                jobId,
+                                eventTime);
+                    }
                     return;
                 }
             }
@@ -130,10 +139,11 @@ public class PaperTradingService {
         }
 
         boolean buy = "BUY".equalsIgnoreCase(pos.getSide());
-        double tp = pos.getTakeProfitPrice();
-        double sl = pos.getStopLossPrice();
-        boolean tpReachable = buy ? candle.high() >= tp : candle.low() <= tp;
-        boolean slReachable = buy ? candle.low() <= sl : candle.high() >= sl;
+        Double tp = pos.getTakeProfitPrice();
+        Double sl = pos.getStopLossPrice();
+        // A null leg (no TP / no SL) is never reachable; the position then only closes via liquidation or reverse.
+        boolean tpReachable = tp != null && (buy ? candle.high() >= tp : candle.low() <= tp);
+        boolean slReachable = sl != null && (buy ? candle.low() <= sl : candle.high() >= sl);
 
         if (!tpReachable && !slReachable) {
             // No TP/SL exit this candle; the position only closes if the adverse extreme triggers liquidation.
@@ -241,13 +251,15 @@ public class PaperTradingService {
             String jobId,
             Instant eventTime) {
         if (!isValidBracket(side, entryMark, takeProfitPrice, stopLossPrice)) {
-            log.warn("Reject open: strategy signal missing or invalid TP/SL jobId={} side={} entry={} tp={} sl={}",
+            // null TP/SL is allowed (no bracket); this only rejects a present leg on the wrong side of entry.
+            log.warn("Reject open: invalid TP/SL placement jobId={} side={} entry={} tp={} sl={}",
                     jobId, side, entryMark, takeProfitPrice, stopLossPrice);
-            auditService.log("OPEN_REJECTED", jobId, "Missing or invalid strategy TP/SL");
+            auditService.log("OPEN_REJECTED", jobId, "Invalid strategy TP/SL placement");
             return;
         }
-        double tp = takeProfitPrice;
-        double sl = stopLossPrice;
+        // null TP/SL means the position has no take-profit / stop-loss leg.
+        Double tp = takeProfitPrice;
+        Double sl = stopLossPrice;
         double allocatedUsdt = resolveAllocatedUsdt(state.getBalanceUsdt());
         if (allocatedUsdt <= 0 || allocatedUsdt > state.getBalanceUsdt()) {
             log.warn("Insufficient balance for opening simulated order. balance={} allocatedUsdt={}",
@@ -274,6 +286,7 @@ public class PaperTradingService {
         position.setOpenFee(feeOpen);
         position.setJobId(jobId);
         position.setOpenedAt(eventTime);
+        position.setEntryCount(1);
 
         state.setOpenPosition(position);
         state.setBalanceUsdt(state.getBalanceUsdt() - feeOpen);
@@ -281,12 +294,85 @@ public class PaperTradingService {
         persistenceService.saveOrder(symbol, side.toUpperCase(), qty, entryMark, "FILLED", jobId);
         persistenceService.savePosition(position, "OPEN", jobId);
         persistenceService.saveFill(symbol, side.toUpperCase(), qty, entryMark, "ENTRY");
-        persistenceService.saveTradeEvent(jobId, "ENTRY", side.toUpperCase(), entryMark, qty, tp, sl, eventTime);
+        persistenceService.saveTradeEvent(
+                jobId, "ENTRY", side.toUpperCase(), entryMark, qty, takeProfitPrice, stopLossPrice, eventTime);
         persistenceService.saveJobBalance(jobId, state.getBalanceUsdt(), eventTime);
         persistenceService.saveSnapshot(state);
         auditService.log("POSITION_OPENED", jobId, "Paper position opened");
         log.info("Opened paper position side={} symbol={} qty={} entry={} allocatedUsdt={} tp={} sl={}",
                 side, symbol, formatQty(qty), entryMark, notional, tp, sl);
+    }
+
+    /**
+     * Adds a same-side leg to the open position (DCA): recomputes the size-weighted average entry, the
+     * aggregate notional/margin, and re-centers TP/SL at the new average entry preserving the new signal's
+     * percent distances.
+     */
+    private void averageIntoPosition(
+            String symbol,
+            double addMark,
+            Double takeProfitPrice,
+            Double stopLossPrice,
+            String jobId,
+            Instant eventTime) {
+        PaperPosition pos = state.getOpenPosition();
+        if (pos == null || !pos.isActive()) {
+            return;
+        }
+        int maxEntries = properties.getAveraging().getMaxEntries();
+        if (maxEntries > 0 && pos.getEntryCount() >= maxEntries) {
+            auditService.log("AVERAGE_SKIPPED", jobId, "Max averaging entries reached: " + maxEntries);
+            return;
+        }
+        if (!isValidBracket(pos.getSide(), addMark, takeProfitPrice, stopLossPrice)) {
+            log.warn("Reject average: invalid TP/SL jobId={} side={} mark={} tp={} sl={}",
+                    jobId, pos.getSide(), addMark, takeProfitPrice, stopLossPrice);
+            auditService.log("AVERAGE_REJECTED", jobId, "Missing or invalid strategy TP/SL");
+            return;
+        }
+        double addNotional = resolveAllocatedUsdt(state.getBalanceUsdt());
+        if (addNotional <= 0 || addNotional > state.getBalanceUsdt()) {
+            log.warn("Insufficient balance to average. balance={} addNotional={}", state.getBalanceUsdt(), addNotional);
+            auditService.log("AVERAGE_REJECTED", jobId, "Insufficient balance");
+            return;
+        }
+
+        double addQty = addNotional / addMark;
+        double newQty = pos.getQuantity() + addQty;
+        double totalCost = pos.getQuantity() * pos.getEntryPrice() + addQty * addMark;
+        double newAvgEntry = totalCost / newQty;
+        double newNotional = totalCost; // == newQty * newAvgEntry
+        // Position size is 1:1 with allocated USDT (no leverage in sizing), matching openPosition.
+        double newMargin = newNotional;
+        double feeOpen = addNotional * properties.getTakerFee();
+        // Re-apply the new signal's TP/SL percent distances (relative to the signal price) onto the new
+        // average entry, preserving disabled (null) legs.
+        Double[] bracket = recenterBracket(
+                pos.getSide(), addMark, newAvgEntry, takeProfitPrice, stopLossPrice);
+
+        pos.setQuantity(newQty);
+        pos.setEntryPrice(newAvgEntry);
+        pos.setNotional(newNotional);
+        pos.setIsolatedMargin(newMargin);
+        pos.setTakeProfitPrice(bracket[0]);
+        pos.setStopLossPrice(bracket[1]);
+        pos.setOpenFee(pos.getOpenFee() + feeOpen);
+        pos.setEntryCount(pos.getEntryCount() + 1);
+
+        state.setBalanceUsdt(state.getBalanceUsdt() - feeOpen);
+        state.getStats().setTotalFees(state.getStats().getTotalFees() + feeOpen);
+
+        persistenceService.saveOrder(symbol, pos.getSide(), addQty, addMark, "FILLED", jobId);
+        persistenceService.savePosition(pos, "AVERAGE", jobId);
+        persistenceService.saveFill(symbol, pos.getSide(), addQty, addMark, "ENTRY");
+        persistenceService.saveTradeEvent(
+                jobId, "AVERAGE", pos.getSide(), addMark, addQty, bracket[0], bracket[1], eventTime);
+        persistenceService.saveJobBalance(jobId, state.getBalanceUsdt(), eventTime);
+        persistenceService.saveSnapshot(state);
+        auditService.log("POSITION_AVERAGED", jobId, "Averaged into existing position (leg " + pos.getEntryCount() + ")");
+        log.info("Averaged position side={} addQty={} addMark={} newQty={} newAvgEntry={} tp={} sl={} legs={}",
+                pos.getSide(), formatQty(addQty), addMark, formatQty(newQty), newAvgEntry,
+                bracket[0], bracket[1], pos.getEntryCount());
     }
 
     private void closePosition(double closeMark, String reason, Instant eventTime) {
@@ -373,6 +459,27 @@ public class PaperTradingService {
                 mode, markPrice, net);
     }
 
+    /** Re-applies bracket distances onto a new entry, preserving disabled ({@code null}) legs. */
+    private static Double[] recenterBracket(
+            String side, double referencePrice, double entryPrice, Double takeProfitPrice, Double stopLossPrice) {
+        boolean buy = "BUY".equalsIgnoreCase(side);
+        Double tp = null;
+        Double sl = null;
+        if (takeProfitPrice != null) {
+            double tpRate = buy
+                    ? (takeProfitPrice - referencePrice) / referencePrice
+                    : (referencePrice - takeProfitPrice) / referencePrice;
+            tp = buy ? entryPrice * (1 + tpRate) : entryPrice * (1 - tpRate);
+        }
+        if (stopLossPrice != null) {
+            double slRate = buy
+                    ? (referencePrice - stopLossPrice) / referencePrice
+                    : (stopLossPrice - referencePrice) / referencePrice;
+            sl = buy ? entryPrice * (1 - slRate) : entryPrice * (1 + slRate);
+        }
+        return new Double[] {tp, sl};
+    }
+
     private double computePnl(PaperPosition pos, double markPrice) {
         if ("BUY".equalsIgnoreCase(pos.getSide())) {
             return (markPrice - pos.getEntryPrice()) * pos.getQuantity();
@@ -390,17 +497,30 @@ public class PaperTradingService {
         return balance * pct;
     }
 
+    /**
+     * Validates the entry and any present TP/SL. A {@code null} TP or SL means "no take-profit" / "no
+     * stop-loss" and is allowed; a present leg must sit on the correct side of the entry.
+     */
     private static boolean isValidBracket(String side, double entry, Double tp, Double sl) {
-        if (tp == null || sl == null || tp <= 0 || sl <= 0 || entry <= 0) {
+        if (entry <= 0) {
             return false;
         }
-        if ("BUY".equalsIgnoreCase(side)) {
-            return tp > entry && sl < entry;
+        boolean buy = "BUY".equalsIgnoreCase(side);
+        boolean sell = "SELL".equalsIgnoreCase(side);
+        if (!buy && !sell) {
+            return false;
         }
-        if ("SELL".equalsIgnoreCase(side)) {
-            return tp < entry && sl > entry;
+        if (tp != null) {
+            if (tp <= 0 || (buy ? tp <= entry : tp >= entry)) {
+                return false;
+            }
         }
-        return false;
+        if (sl != null) {
+            if (sl <= 0 || (buy ? sl >= entry : sl <= entry)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void resetInternal() {
@@ -435,6 +555,7 @@ public class PaperTradingService {
             cp.setJobId(p.getJobId());
             cp.setOpenedAt(p.getOpenedAt());
             cp.setActive(p.isActive());
+            cp.setEntryCount(p.getEntryCount());
             dst.setOpenPosition(cp);
         }
         PaperStats s = src.getStats();
@@ -462,21 +583,24 @@ public class PaperTradingService {
             return;
         }
 
+        // A null TP/SL leg means there is no take-profit / stop-loss; skip that check.
+        Double tp = pos.getTakeProfitPrice();
+        Double sl = pos.getStopLossPrice();
         if ("BUY".equalsIgnoreCase(pos.getSide())) {
-            if (markPrice >= pos.getTakeProfitPrice()) {
+            if (tp != null && markPrice >= tp) {
                 closePosition(markPrice, "TP", eventTime);
                 return;
             }
-            if (markPrice <= pos.getStopLossPrice()) {
+            if (sl != null && markPrice <= sl) {
                 closePosition(markPrice, "SL", eventTime);
                 return;
             }
         } else {
-            if (markPrice <= pos.getTakeProfitPrice()) {
+            if (tp != null && markPrice <= tp) {
                 closePosition(markPrice, "TP", eventTime);
                 return;
             }
-            if (markPrice >= pos.getStopLossPrice()) {
+            if (sl != null && markPrice >= sl) {
                 closePosition(markPrice, "SL", eventTime);
                 return;
             }
