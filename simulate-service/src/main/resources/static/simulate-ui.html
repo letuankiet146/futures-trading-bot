@@ -22,7 +22,13 @@
         .view-tab.active { background: #f0c000; color: #111; border-color: #f0c000; }
         .view-panel { display: none; }
         .view-panel.active { display: block; }
-        .balance-caption { margin: 0 0 10px; color: #aaa; font-size: 13px; }
+        .balance-caption { margin: 0; color: #aaa; font-size: 13px; flex: 1; }
+        .balance-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        .fit-balance-btn {
+            padding: 4px 12px; cursor: pointer; background: #222; color: #eee;
+            border: 1px solid #444; border-radius: 4px; font-size: 12px; white-space: nowrap;
+        }
+        .fit-balance-btn:hover { background: #2a2a2a; }
         .meta { margin-top: 10px; color: #bbb; font-size: 13px; }
         .error { color: #ff6b6b; margin-top: 10px; }
         .indicators { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
@@ -188,7 +194,10 @@
 </div>
 
 <div id="balancePanel" class="view-panel">
-    <p class="balance-caption">Account equity curve (USDT) — pan/zoom synced with Market tab when switching.</p>
+    <div class="balance-toolbar">
+        <p class="balance-caption">Account equity (USDT) — scroll/pinch to zoom time axis; drag price axis to zoom balance scale.</p>
+        <button type="button" class="fit-balance-btn" id="fitBalanceBtn" title="Show full balance history">Fit all</button>
+    </div>
     <div id="balance"></div>
 </div>
 
@@ -211,6 +220,7 @@
     const balancePanel = document.getElementById('balancePanel');
     const tabMarket = document.getElementById('tabMarket');
     const tabBalance = document.getElementById('tabBalance');
+    const fitBalanceBtn = document.getElementById('fitBalanceBtn');
     const applyBtn = document.getElementById('applyBtn');
     const tradesBody = document.getElementById('tradesBody');
     const tradesCount = document.getElementById('tradesCount');
@@ -237,34 +247,27 @@
         tabMarket.classList.toggle('active', tab === 'market');
         tabBalance.classList.toggle('active', tab === 'balance');
         requestAnimationFrame(() => {
-            if (tab === 'balance') {
-                syncRangeToBalance();
-                if (balanceChart) balanceChart.applyOptions({ autoSize: true });
-            } else {
-                syncRangeToMarket();
-                if (priceChart) priceChart.applyOptions({ autoSize: true });
+            if (tab === 'balance' && balanceChart) {
+                balanceChart.applyOptions({ autoSize: true });
+            } else if (tab === 'market' && priceChart) {
+                priceChart.applyOptions({ autoSize: true });
             }
         });
         try { localStorage.setItem('simViewTab', tab); } catch (_) { /* ignore */ }
     }
 
-    function syncRangeToBalance() {
-        if (!priceChart || !balanceChart) return;
-        const range = priceChart.timeScale().getVisibleLogicalRange();
-        if (range) balanceChart.timeScale().setVisibleLogicalRange(range);
+    function fitBalanceChart() {
+        if (!balanceChart) return;
+        balanceChart.timeScale().fitContent();
+        try {
+            balanceChart.priceScale('right').applyOptions({ autoScale: true });
+        } catch (_) { /* older builds */ }
     }
 
-    function syncRangeToMarket() {
-        if (!priceChart || !balanceChart) return;
-        const range = balanceChart.timeScale().getVisibleLogicalRange();
-        if (range) priceChart.timeScale().setVisibleLogicalRange(range);
-    }
-
-    function setVisibleLogicalRangeAll(from, to) {
+    function setVisibleLogicalRangeMarket(from, to) {
         const range = { from, to };
         try {
             if (priceChart) priceChart.timeScale().setVisibleLogicalRange(range);
-            if (balanceChart) balanceChart.timeScale().setVisibleLogicalRange(range);
         } catch (err) {
             console.warn('Unable to set chart range', err);
         }
@@ -561,6 +564,34 @@
         };
     }
 
+    function buildBalanceChartOptions() {
+        const opts = buildChartOptions();
+        opts.handleScroll = {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: true
+        };
+        opts.handleScale = {
+            mouseWheel: true,
+            pinch: true,
+            axisPressedMouseMove: true,
+            axisDoubleClickReset: true
+        };
+        opts.timeScale = {
+            ...opts.timeScale,
+            minBarSpacing: 0,
+            fixLeftEdge: false,
+            fixRightEdge: false
+        };
+        opts.rightPriceScale = {
+            borderColor: '#444',
+            autoScale: true,
+            scaleMargins: { top: 0.08, bottom: 0.08 }
+        };
+        return opts;
+    }
+
     function addLineSeriesCompat(chart, options) {
         if (typeof chart.addLineSeries === 'function') {
             return chart.addLineSeries(options || {});
@@ -723,17 +754,19 @@
             }
         }
 
-        balanceChart = LightweightCharts.createChart(balanceHost, buildChartOptions());
-        const balanceSeries = addLineSeriesCompat(balanceChart, { color: '#4fc3f7', lineWidth: 2 });
+        balanceChart = LightweightCharts.createChart(balanceHost, buildBalanceChartOptions());
+        const balanceSeries = addLineSeriesCompat(balanceChart, {
+            color: '#4fc3f7',
+            lineWidth: 2,
+            title: 'Balance USDT'
+        });
         const balanceData = normalizeBalance(data.balance);
-        // Align equity curve to the candle axis so all panes share one time scale (stable zoom sync).
-        balanceSeries.setData(barData.length ? forwardFillToBars(barData, balanceData) : balanceData);
-        balanceChart.timeScale().fitContent();
+        // Sparse snapshots only — avoids stretching across every candle bar (which blocks zoom-out).
+        balanceSeries.setData(balanceData);
+        fitBalanceChart();
 
         syncTimeScales([priceChart, rsiChart, ratioChart]);
-        // Single source of truth for the initial view; propagates to synced market panes.
         priceChart.timeScale().fitContent();
-        syncRangeToBalance();
 
         renderTrades(data.events, data.openPosition);
 
@@ -842,7 +875,7 @@
             to = maxTo;
         }
         try {
-            setVisibleLogicalRangeAll(from, to);
+            setVisibleLogicalRangeMarket(from, to);
         } catch (err) {
             console.warn('Unable to focus chart on time', err);
         }
@@ -957,6 +990,7 @@
 
     tabMarket.addEventListener('click', () => setViewTab('market'));
     tabBalance.addEventListener('click', () => setViewTab('balance'));
+    fitBalanceBtn.addEventListener('click', fitBalanceChart);
 
     (function initViewTab() {
         let tab = 'market';
